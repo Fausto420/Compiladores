@@ -1,0 +1,35 @@
+Las tres estructuras de datos (Stack, Queue y OrderedTable) fueron programadas desde cero sin usar librerías externas.
+Se usaron sólo listas para almacenar los elementos.
+
+Stack (LIFO): "push", "pop", "peek", "is_empty", "size", "clear"
+Queue (FIFO): "enqueue", "dequeue", "front", "is_empty", "size", "clear"
+OrderedTable (TABLE/HASH/DICTIONARY): "set", "get", "has", "delete", "keys", "values", "items", "size", "clear". Esta estructura conserva el orden de inserción.
+
+No se usaron librerías externas ni paquetes especiales; tampoco fue necesario apoyarse en librerías de estructuras como "collections" o "dict".
+El código fue escrito desde cero. Para revisarlo y simplificarlo, se usó ChatGPT como apoyo, pero el código final es propio y entendible.
+
+# Casos de prueba
+
+El archivo pruebas.py ejecuta y muestra las operaciones básicas de cada estructura:
+
+Stack:
+- Insertar tres valores ("push"),
+- Ver el tope ("peek"),
+- Extraer el último elemento ("pop"),
+- Imprimir la pila antes y después de las operaciones.
+
+Queue:
+- Insertar tres valores ("enqueue"),
+- Ver el frente ("front"),
+- Sacar el primer elemento en entrar ("dequeue"),
+- Imprimir la cola antes y después de las operaciones.
+
+OrderedTable:
+- Insertar pares clave-valor ("set"),
+- Consultar el tamaño ("size"),
+- Mostrar claves ("keys") y todos los pares ("items"),
+- Buscar un valor por clave ("get"),
+- Eliminar una clave ("delete"),
+- Ver cómo los elementos se mantienen en "el orden en que fueron insertados" incluso después de actualizaciones o eliminaciones.
+
+Estos casos de prueba confirman que las estructuras funcionan correctamente y permiten observar el comportamiento esperado de cada operación.
