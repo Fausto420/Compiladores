@@ -1,0 +1,104 @@
+// - LÉXICO -
+
+// Ignorar espacios y saltos de línea
+WS: /[ \t\n]+/
+%ignore WS
+
+// regex
+ID: /[A-Za-z_][A-Za-z_0-9]*/
+CTE_INT: /[0-9]+/
+CTE_FLOAT: /[0-9]+\.[0-9]+/
+CTE_STRING: /"[^"]*"/
+
+// Palabras clave
+PROGRAM: "program"
+VAR: "var"
+VOID: "void"
+MAIN: "main"
+END: "end"
+IF: "if"
+ELSE: "else"
+WHILE: "while"
+DO: "do"
+PRINT: "print"
+INT: "int"
+FLOAT: "float"
+
+// Operadores y separadores
+NOTEQUAL: "!="
+ASSIGN: "="
+GREATER: ">"
+LESS: "<"
+PLUS: "+"
+MINUS: "-"
+STAR: "*"
+SLASH: "/"
+COLON: ":"
+COMMA: ","
+SEMICOL: ";"
+
+// Agrupadores
+LPAREN: "("
+RPAREN: ")"
+LBRACE: "{"
+RBRACE: "}"
+LBRACKET: "["
+RBRACKET: "]"
+
+// - SINTAXIS - 
+
+start: program
+
+// Programa
+program: PROGRAM ID [SEMICOL] var_section func_section main_block END
+
+// Tipos
+type: INT | FLOAT
+
+// Variables
+var_section: (VAR [COLON] var_decl+)?
+var_decl: type id_list SEMICOL
+id_list: var_item (COMMA var_item)*
+var_item: ID array_dims?
+array_dims: LBRACKET CTE_INT RBRACKET (LBRACKET CTE_INT RBRACKET)*
+
+// Funciones
+func_section: func_decl*
+func_decl: (type | VOID) ID LPAREN [param_list] RPAREN block
+param_list: param (COMMA param)*
+param: type ID
+
+// main
+main_block: MAIN block
+
+// Bloques y sentencias
+block: LBRACE statement* RBRACE
+
+statement: assign | condition | cycle | print_stmt | func_call SEMICOL | block
+
+assign: location ASSIGN expr SEMICOL
+location: ID (LBRACKET expr RBRACKET)*
+
+condition: IF LPAREN expr RPAREN block (ELSE block)?
+
+cycle: WHILE LPAREN expr RPAREN block | DO block WHILE LPAREN expr RPAREN SEMICOL
+
+print_stmt: PRINT LPAREN print_args RPAREN SEMICOL
+print_args: expr (COMMA expr)*
+
+// - EXPRESIONES -
+
+?expr: relational_expr
+
+?relational_expr: arith_expr ( (GREATER|LESS|NOTEQUAL) arith_expr )*
+
+?arith_expr: term ( (PLUS|MINUS) term )*
+
+?term: factor ( (STAR|SLASH) factor )*
+
+?factor: (PLUS|MINUS) factor | atom
+
+?atom: ID -> var | CTE_INT -> int | CTE_FLOAT -> float | CTE_STRING -> string | func_call | LPAREN expr RPAREN
+
+func_call: ID LPAREN [arg_list] RPAREN
+arg_list: expr (COMMA expr)*
