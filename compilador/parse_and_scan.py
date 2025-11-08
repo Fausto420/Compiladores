@@ -17,18 +17,21 @@ def parse(source: str):
 
 DEMO_CODE = """\
 program demo;
-var:
-  int x, y;
-  float z;
-void foo(int a) { print(a); }
+vars:
+  x, y: int;
+  z: float;
+void foo(a: int) [
+  vars:
+    t: int;
+  {
+    print(a, "echo");
+  }
+];
 main {
   x = 10;
-  y = x + 3 * 2;
-  if (y != 0) {
-    print("ok", y);
-  } else {
-    do { y = y - 1; } while (y > 0);
-  }
+  y = 1 + 2 * 3;
+  if (y == 7) { print(y, "is seven"); };
+  while (y > 0) do { y = y - 1; };
 }
 end
 """

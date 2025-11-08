@@ -1,18 +1,18 @@
 // - LÉXICO -
 
 // Ignorar espacios y saltos de línea
-WS: /[ \t\n]+/
+WS: /[ \t\r\n]+/
 %ignore WS
 
-// regex
+// Regex
 ID: /[A-Za-z_][A-Za-z_0-9]*/
-CTE_INT: /[0-9]+/
 CTE_FLOAT: /[0-9]+\.[0-9]+/
-CTE_STRING: /"[^"]*"/
+CTE_INT: /[0-9]+/
+CTE_STRING: /"[^"\n]*"/
 
 // Palabras clave
 PROGRAM: "program"
-VAR: "var"
+VARS: "vars"
 VOID: "void"
 MAIN: "main"
 END: "end"
@@ -25,6 +25,7 @@ INT: "int"
 FLOAT: "float"
 
 // Operadores y separadores
+EQUAL: "=="
 NOTEQUAL: "!="
 ASSIGN: "="
 GREATER: ">"
@@ -50,55 +51,55 @@ RBRACKET: "]"
 start: program
 
 // Programa
-program: PROGRAM ID [SEMICOL] var_section func_section main_block END
+program: PROGRAM ID SEMICOL vars_section funcs_section MAIN body END
 
 // Tipos
 type: INT | FLOAT
 
 // Variables
-var_section: (VAR [COLON] var_decl+)?
-var_decl: type id_list SEMICOL
-id_list: var_item (COMMA var_item)*
-var_item: ID array_dims?
-array_dims: LBRACKET CTE_INT RBRACKET (LBRACKET CTE_INT RBRACKET)*
+vars_section: VARS COLON decvar+ 
+decvar: id_list COLON type SEMICOL
+id_list: ID (COMMA ID)*
 
 // Funciones
-func_section: func_decl*
-func_decl: (type | VOID) ID LPAREN [param_list] RPAREN block
-param_list: param (COMMA param)*
-param: type ID
+funcs_section: func_decl*
+func_decl: VOID ID LPAREN params RPAREN LBRACKET vars_section body RBRACKET SEMICOL
+params: param (COMMA param)*
+param: ID COLON type
 
-// main
-main_block: MAIN block
+// BODY y sentencias
+body: LBRACE stmt_list RBRACE
+stmt_list: statement*
 
-// Bloques y sentencias
-block: LBRACE statement* RBRACE
+statement: assign | condition | cycle | fcall | print_stmt | body
 
-statement: assign | condition | cycle | print_stmt | func_call SEMICOL | block
+// Asignación 
+assign: ID ASSIGN expression SEMICOL
 
-assign: location ASSIGN expr SEMICOL
-location: ID (LBRACKET expr RBRACKET)*
+// Condicional
+condition: IF LPAREN expression RPAREN body (ELSE body)? SEMICOL
 
-condition: IF LPAREN expr RPAREN block (ELSE block)?
+// Ciclo While
+cycle: WHILE LPAREN expression RPAREN DO body SEMICOL
 
-cycle: WHILE LPAREN expr RPAREN block | DO block WHILE LPAREN expr RPAREN SEMICOL
+// Llamada a función
+fcall: ID LPAREN args RPAREN SEMICOL
+args: expression (COMMA expression)*
 
+// Print
 print_stmt: PRINT LPAREN print_args RPAREN SEMICOL
-print_args: expr (COMMA expr)*
+print_args: CTE_STRING | expression (COMMA CTE_STRING)?
 
 // - EXPRESIONES -
 
-?expr: relational_expr
+?expression: simple_expr rel_tail?
+rel_tail: (GREATER | LESS | NOTEQUAL | EQUAL) simple_expr
 
-?relational_expr: arith_expr ( (GREATER|LESS|NOTEQUAL) arith_expr )*
+?simple_expr: term ((PLUS | MINUS) term)*
+?term: factor ((STAR | SLASH) factor)*
 
-?arith_expr: term ( (PLUS|MINUS) term )*
+?factor: LPAREN expression RPAREN | sign_opt primary
+sign_opt: (PLUS | MINUS)?
 
-?term: factor ( (STAR|SLASH) factor )*
-
-?factor: (PLUS|MINUS) factor | atom
-
-?atom: ID -> var | CTE_INT -> int | CTE_FLOAT -> float | CTE_STRING -> string | func_call | LPAREN expr RPAREN
-
-func_call: ID LPAREN [arg_list] RPAREN
-arg_list: expr (COMMA expr)*
+primary: ID | number
+number: CTE_INT | CTE_FLOAT
