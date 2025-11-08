@@ -3,7 +3,7 @@ from lark import Lark, UnexpectedInput
 PARSER = Lark.open(
     "grammar.lark",
     parser="lalr",
-    start="start",
+    start="program",
     lexer="contextual",
 )
 
