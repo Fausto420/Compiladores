@@ -1,15 +1,42 @@
-# demo_build.py
-from parse_and_scan import parse, DEMO_CODE
-from builder import build_symbols
+from pprint import pprint
 
-fd = build_symbols(parse, DEMO_CODE)
+from parse_and_scan import parse
+from builder import build_symbol_tables
+from semantics import SemanticError
 
-print("GLOBALS")
-for name, v in fd.globals._vars.items():
-    print(name, ":", v.vtype)
+TEST_PROGRAM = """\
+program demo;
+vars:
+  x, y: int;
+  z: float;
 
-print("\nFUNCTIONS")
-for fname, fe in fd.funcs.items():
-    print(f"* {fname} (VOID)")
-    print("  params:", [(p.name, p.ptype) for p in fe.params])
-    print("  locals:", [(n, e.vtype) for n, e in fe.vartable._vars.items() if not e.is_param])
+void foo(a: int, b: float) [
+  vars:
+    t: int;
+  {
+    x = 10;
+    t = a;
+  }
+];
+
+main {
+  y = 1 + 2 * 3;
+}
+end
+"""
+
+def main():
+    try:
+        # 1. Construye el directorio de funciones y las tablas de variables
+        function_directory = build_symbol_tables(parse, TEST_PROGRAM)
+    except SemanticError as error:
+        print("Error semántico:", error)
+        return
+
+    # 2. Imprime el resultado en formato diccionario para verlo claro
+    print("\nDIRECTORIO DE FUNCIONES Y TABLAS DE VARIABLES:\n")
+    pprint(function_directory.to_dict())
+
+
+if __name__ == "__main__":
+    main()
