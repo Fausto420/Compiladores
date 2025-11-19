@@ -4,18 +4,34 @@ from parse_and_scan import parse, scan
 DEMO = """\
 program demo;
 vars:
-  x, y: int;
-  z: float;
-void foo(a: int) [
-  vars:
-    t: int;
-  { print(a, "echo"); }
+    a, b, c: int;
+    x: float;
+
+void foo(p: int, q: float) [
+    vars:
+        tmp: int;
+    {
+        print("in foo");
+    }
 ];
+
 main {
-  x = 10;
-  y = 1 + 2 * 3;
-  if (y == 7) { print(y, "is seven"); };
-  while (y > 0) do { y = y - 1; };
+    a = 2;
+    b = 3;
+    c = a + b * 4;
+    print(c, " result");
+
+    if (c > 10) {
+        print("big");
+    } else {
+        print("small");
+    };
+
+    while (c < 20) do {
+        c = c + 1;
+    };
+
+    foo(c, x);
 }
 end
 """

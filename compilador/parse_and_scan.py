@@ -15,23 +15,37 @@ def parse(source: str):
     "Devuelve el árbol de parseo. Lanza error si hay mala sintaxis."
     return PARSER.parse(source)
 
-DEMO_CODE = """\
+DEMO = """\
 program demo;
 vars:
-  x, y: int;
-  z: float;
-void foo(a: int) [
-  vars:
-    t: int;
-  {
-    print(a, "echo");
-  }
+    a, b, c: int;
+    x: float;
+
+void foo(p: int, q: float) [
+    vars:
+        tmp: int;
+    {
+        print("in foo");
+    }
 ];
+
 main {
-  x = 10;
-  y = 1 + 2 * 3;
-  if (y == 7) { print(y, "is seven"); };
-  while (y > 0) do { y = y - 1; };
+    a = 2;
+    b = 3;
+    c = a + b * 4;
+    print(c, " result");
+
+    if (c > 10) {
+        print("big");
+    } else {
+        print("small");
+    };
+
+    while (c < 20) do {
+        c = c + 1;
+    };
+
+    foo(c, x);
 }
 end
 """
@@ -44,7 +58,7 @@ if __name__ == "__main__":
         code_path = Path(sys.argv[1])
         code = code_path.read_text(encoding="utf-8")
     else:
-        code = DEMO_CODE
+        code = DEMO
 
     print("TOKENS")
     try:

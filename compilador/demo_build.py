@@ -4,23 +4,37 @@ from parse_and_scan import parse
 from builder import build_symbol_tables
 from semantics import SemanticError
 
-TEST_PROGRAM = """\
+DEMO = """\
 program demo;
 vars:
-  x, y: int;
-  z: float;
+    a, b, c: int;
+    x: float;
 
-void foo(a: int, b: float) [
-  vars:
-    t: int;
-  {
-    x = 10;
-    t = a;
-  }
+void foo(p: int, q: float) [
+    vars:
+        tmp: int;
+    {
+        print("in foo");
+    }
 ];
 
 main {
-  y = 1 + 2 * 3;
+    a = 2;
+    b = 3;
+    c = a + b * 4;
+    print(c, " result");
+
+    if (c > 10) {
+        print("big");
+    } else {
+        print("small");
+    };
+
+    while (c < 20) do {
+        c = c + 1;
+    };
+
+    foo(c, x);
 }
 end
 """
@@ -28,7 +42,7 @@ end
 def main():
     try:
         # 1. Construye el directorio de funciones y las tablas de variables
-        function_directory = build_symbol_tables(parse, TEST_PROGRAM)
+        function_directory = build_symbol_tables(parse, DEMO)
     except SemanticError as error:
         print("Error semántico:", error)
         return

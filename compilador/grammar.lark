@@ -92,14 +92,14 @@ print_args: CTE_STRING | expression (COMMA CTE_STRING)?
 
 // - EXPRESIONES -
 
-?expression: simple_expr rel_tail?
+expression: simple_expr rel_tail?
 rel_tail: (GREATER | LESS | NOTEQUAL | EQUAL) simple_expr
 
-?simple_expr: term ((PLUS | MINUS) term)*
-?term: factor ((STAR | SLASH) factor)*
+simple_expr: term ((PLUS | MINUS) term)*
+term: factor ((STAR | SLASH) factor)*
 
-?factor: LPAREN expression RPAREN | sign_opt primary
+factor: LPAREN expression RPAREN | sign_opt primary
 sign_opt: (PLUS | MINUS)?
-
 primary: ID | number
 number: CTE_INT | CTE_FLOAT
+
