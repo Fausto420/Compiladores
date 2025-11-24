@@ -8,8 +8,8 @@ PARSER = Lark.open(
 )
 
 def scan(source: str):
-  "Devuelve una lista de tokens. Lanza error si hay mala sintaxis."
-  return [(tok.type, tok.value) for tok in PARSER.lex(source)]
+    "Devuelve una lista de tokens. Lanza error si hay mala sintaxis."
+    return [(tok.type, tok.value) for tok in PARSER.lex(source)]
 
 def parse(source: str):
     "Devuelve el árbol de parseo. Lanza error si hay mala sintaxis."
