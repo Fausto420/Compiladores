@@ -447,6 +447,7 @@ class ExpressionQuadrupleGenerator:
     def _generate_expression(self, expression_tree: Tree) -> ExpressionResult:
         """
         expression: simple_expr rel_tail?
+        rel_tail: (GREATER | LESS | NOTEQUAL | EQUAL) simple_expr | ε
         """
         children = expression_tree.children
 

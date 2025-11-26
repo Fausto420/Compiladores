@@ -16,6 +16,8 @@ def generate_quadruples(source_code: str) -> IntermediateCodeContext:
     parse_tree = parse(source_code)
 
     # 2) Directorio de funciones y variables (semántica de la entrega 2)
+    # build_symbol_tables vuelve a llamar parse(source_code) internamente.
+    # Se mantiene así para reutilizar la función en otros contextos.
     function_directory = build_symbol_tables(parse, source_code)
 
     # 3) Contexto de código intermedio
