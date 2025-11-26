@@ -6,30 +6,29 @@ from expression_to_quads import ExpressionQuadrupleGenerator
 
 def generate_quadruples(source_code: str) -> IntermediateCodeContext:
     """
-    Genera su código intermedio en forma de cuádruplos.
+    Genera el código intermedio en forma de cuádruplos.
 
-    Regresa el IntermediateCodeContext, que contiene:
+    Regresa un IntermediateCodeContext, que contiene:
     - operator_stack, operand_stack, type_stack
     - quadruples (fila de cuádruplos)
     """
-    # 1) Construye el árbol de parseo del programa
+    # 1) Árbol de parseo del programa
     parse_tree = parse(source_code)
 
-    # 2) Construye las tablas semánticas (variables, funciones, tipos)
+    # 2) Directorio de funciones y variables (semántica de la entrega 2)
     function_directory = build_symbol_tables(parse, source_code)
 
-    # 3) Crea el contexto de código intermedio
+    # 3) Contexto de código intermedio
     context = IntermediateCodeContext()
 
-    # 4) Crea el generador de cuádruplos para expresiones + asignaciones
-    expression_generator = ExpressionQuadrupleGenerator(
-        context=context,
+    # 4) Generador de cuádruplos para expresiones + estatutos
+    generator = ExpressionQuadrupleGenerator(
         function_directory=function_directory,
-        current_function_name=None,  # por ahora se asumen solo variables globales
+        context=context,
     )
 
-    # 5) Recorre todo el árbol del programa.
-    expression_generator.transform(parse_tree)
+    # 5) Recorre el árbol completo del programa
+    generator.generate_program(parse_tree)
 
     # 6) Regresa el contexto ya lleno de cuádruplos
     return context

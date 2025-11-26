@@ -55,6 +55,39 @@ class ExpressionQuadrupleGenerator:
         # Nombre de la función actual (None = cuerpo principal)
         self.current_function_name: Optional[str] = None
 
+    def _emit_binary_operation(
+        self,
+        operator_name: str,
+        left: "ExpressionResult",
+        right: "ExpressionResult",
+    ) -> "ExpressionResult":
+
+        # 1) Meter operandos + tipos en las pilas
+        self.context.push_operand(left.name, left.result_type)
+        self.context.push_operand(right.name, right.result_type)
+        self.context.push_operator(operator_name)
+
+        # 2) Sacar de las pilas para generar el cuádruplo
+        op = self.context.operator_stack.pop()
+        right_name = self.context.operand_stack.pop()
+        right_type = self.context.type_stack.pop()
+        left_name = self.context.operand_stack.pop()
+        left_type = self.context.type_stack.pop()
+
+        # Tipo resultante según el cubo semántico
+        result_t = result_type(op, left_type, right_type)
+
+        # 3) Crear temporal y cuádruplo
+        temp_name = self.context.temporary_generator.new_temporary()
+        self.context.quadruples.enqueue(
+            Quadruple(op, left_name, right_name, temp_name)
+        )
+
+        # 4) Volver a meter el resultado como operando
+        self.context.push_operand(temp_name, result_t)
+
+        return ExpressionResult(temp_name, result_t)
+
     # Entradas de alto nivel
     def generate_program(self, program_tree: Tree) -> IntermediateCodeContext:
         """
@@ -411,7 +444,6 @@ class ExpressionQuadrupleGenerator:
         end_index = len(self.context.quadruples)
         self.context.quadruples.update_result(gotof_index, end_index)
 
-    # Expresiones
     def _generate_expression(self, expression_tree: Tree) -> ExpressionResult:
         """
         expression: simple_expr rel_tail?
@@ -428,43 +460,35 @@ class ExpressionQuadrupleGenerator:
         # Hay comparación relacional
         rel_tail_tree = children[1]
 
-        operator_token: Optional[Token] = None
-        right_simple_expr_tree: Optional[Tree] = None
+        # En la gramática actual rel_tail siempre puede existir pero estar vacío.
+        if not isinstance(rel_tail_tree, Tree) or not rel_tail_tree.children:
+            return left_result
 
-        for child in rel_tail_tree.children:
-            if isinstance(child, Token):
-                operator_token = child
-            elif isinstance(child, Tree) and child.data == "simple_expr":
-                right_simple_expr_tree = child
+        operator_token = rel_tail_tree.children[0]
+        right_simple_expr_tree = rel_tail_tree.children[1]
 
-        if operator_token is None or right_simple_expr_tree is None:
-            raise ValueError("rel_tail incompleto.")
-
-        operator_name = operator_token.type # GREATER, LESS, NOTEQUAL, EQUAL
-
+        operator_name = operator_token.type  # GREATER, LESS, NOTEQUAL, EQUAL
         right_result = self._generate_simple_expr(right_simple_expr_tree)
 
-        result_t: TypeName = result_type(
-            operator=operator_name,
-            left_type=left_result.result_type,
-            right_type=right_result.result_type,
-        )
-        ensure_bool(result_t, context="relational expression")
-
-        temp_name = self.context.temporary_generator.new_temporary()
-
-        self.context.quadruples.enqueue(
-            Quadruple(operator_name, left_result.name, right_result.name, temp_name)
+        # Usamos las pilas para generar el cuádruplo relacional
+        comparison_result = self._emit_binary_operation(
+            operator_name,
+            left_result,
+            right_result,
         )
 
-        return ExpressionResult(temp_name, result_t)
+        # La comparación debe ser booleana
+        ensure_bool(comparison_result.result_type, context="relational expression")
 
+        return comparison_result
+    
     def _generate_simple_expr(self, simple_expr_tree: Tree) -> ExpressionResult:
         """
         simple_expr: term ((PLUS | MINUS) term)*
         """
         children = simple_expr_tree.children
 
+        # Primer término
         current_result = self._generate_term(children[0])
 
         index = 1
@@ -475,19 +499,13 @@ class ExpressionQuadrupleGenerator:
             operator_name = operator_token.type  # PLUS o MINUS
             right_result = self._generate_term(right_term_tree)
 
-            result_t: TypeName = result_type(
-                operator=operator_name,
-                left_type=current_result.result_type,
-                right_type=right_result.result_type,
+            # Genera el cuádruplo utilizando las pilas
+            current_result = self._emit_binary_operation(
+                operator_name,
+                current_result,
+                right_result,
             )
 
-            temp_name = self.context.temporary_generator.new_temporary()
-
-            self.context.quadruples.enqueue(
-                Quadruple(operator_name, current_result.name, right_result.name, temp_name)
-            )
-
-            current_result = ExpressionResult(temp_name, result_t)
             index += 2
 
         return current_result
@@ -508,19 +526,13 @@ class ExpressionQuadrupleGenerator:
             operator_name = operator_token.type  # STAR o SLASH
             right_result = self._generate_factor(right_factor_tree)
 
-            result_t: TypeName = result_type(
-                operator=operator_name,
-                left_type=current_result.result_type,
-                right_type=right_result.result_type,
+            # Genera el cuádruplo utilizando las pilas
+            current_result = self._emit_binary_operation(
+                operator_name,
+                current_result,
+                right_result,
             )
 
-            temp_name = self.context.temporary_generator.new_temporary()
-
-            self.context.quadruples.enqueue(
-                Quadruple(operator_name, current_result.name, right_result.name, temp_name)
-            )
-
-            current_result = ExpressionResult(temp_name, result_t)
             index += 2
 
         return current_result
