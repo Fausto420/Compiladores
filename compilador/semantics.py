@@ -160,6 +160,7 @@ class VariableInfo:
     var_type: TypeName
     is_parameter: bool = False
     parameter_position: Optional[int] = None
+    virtual_address: Optional[int] = None
 
 @dataclass
 class VariableTable:

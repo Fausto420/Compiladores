@@ -1,8 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional, List
-
 from lark import Tree, Token
-
 from semantics import (
     FunctionDirectory,
     TypeName,
@@ -14,35 +12,38 @@ from semantics import (
     ensure_bool,
     SemanticError,
 )
-
 from intermediate_code_structures import (
     IntermediateCodeContext,
     Quadruple,
 )
+from virtual_memory import VirtualMemory
+
 
 # Resultado de subexpresiones
 @dataclass
 class ExpressionResult:
     """
     Representa el resultado de evaluar una subexpresión.
-    name: Nombre donde está el valor (variable, constante o temporal).
+    address: dirección virtual donde se encuentra el valor (variable, constante o temporal).
     result_type: Tipo del valor (INT, FLOAT, BOOL).
     """
-    name: str
+    address: int
     result_type: TypeName
 
 # Generador principal de cuádruplos
 class ExpressionQuadrupleGenerator:
     """
     Recorre el árbol sintáctico de Lark y llena un IntermediateCodeContext
-    con cuádruplos para expresiones aritméticas y relacionales; e
-    statutos lineales: assign, print_stmt, fcall; y estatutos no lineales: condition (if/else), cycle (while).
+    con cuádruplos para expresiones aritméticas y relacionales; y
+    estatutos lineales: assign, print_stmt, fcall; y estatutos no lineales: 
+    condition (if/else), cycle (while).
     """
 
     def __init__(
-        self,
-        function_directory: FunctionDirectory,
-        context: Optional[IntermediateCodeContext] = None,
+        self, 
+        function_directory: FunctionDirectory, 
+        context: Optional[IntermediateCodeContext] = None, 
+        virtual_memory: Optional[VirtualMemory] = None
     ) -> None:
         # Directorio de funciones y variables (builder.py)
         self.function_directory: FunctionDirectory = function_directory
@@ -50,6 +51,11 @@ class ExpressionQuadrupleGenerator:
         # Contexto con pilas, temporales y fila de cuádruplos
         self.context: IntermediateCodeContext = (
             context if context is not None else IntermediateCodeContext()
+        )
+
+        # Memoria virtual: aquí se asignan direcciones a temporales y constantes
+        self.virtual_memory: VirtualMemory = (
+            virtual_memory if virtual_memory is not None else VirtualMemory()
         )
 
         # Nombre de la función actual (None = cuerpo principal)
@@ -61,32 +67,40 @@ class ExpressionQuadrupleGenerator:
         left: "ExpressionResult",
         right: "ExpressionResult",
     ) -> "ExpressionResult":
+        """
+        Genera el cuádruplo para una operación binaria (aritmética o relacional),
+        usando las pilas del contexto y regresando el resultado como un nuevo
+        ExpressionResult basado en direcciones virtuales.
+        """
 
-        # 1) Meter operandos + tipos en las pilas
-        self.context.push_operand(left.name, left.result_type)
-        self.context.push_operand(right.name, right.result_type)
+        # 1) Meter operandos + tipos en las pilas (direcciones virtuales)
+        self.context.push_operand(left.address, left.result_type)
+        self.context.push_operand(right.address, right.result_type)
         self.context.push_operator(operator_name)
 
         # 2) Sacar de las pilas para generar el cuádruplo
         op = self.context.operator_stack.pop()
-        right_name = self.context.operand_stack.pop()
+        right_address = self.context.operand_stack.pop()
         right_type = self.context.type_stack.pop()
-        left_name = self.context.operand_stack.pop()
+        left_address = self.context.operand_stack.pop()
         left_type = self.context.type_stack.pop()
 
-        # Tipo resultante según el cubo semántico
+        # 3) Determinar tipo resultante usando el cubo semántico
         result_t = result_type(op, left_type, right_type)
 
-        # 3) Crear temporal y cuádruplo
-        temp_name = self.context.temporary_generator.new_temporary()
+        # 4) Pedir una dirección virtual para el temporal resultante
+        temp_address = self.virtual_memory.allocate_temporary(result_t)
+
+        # 5) Generar el cuádruplo con direcciones virtuales
         self.context.quadruples.enqueue(
-            Quadruple(op, left_name, right_name, temp_name)
+            Quadruple(op, left_address, right_address, temp_address)
         )
 
-        # 4) Volver a meter el resultado como operando
-        self.context.push_operand(temp_name, result_t)
+        # 6) Meter de nuevo el resultado a las pilas
+        self.context.push_operand(temp_address, result_t)
 
-        return ExpressionResult(temp_name, result_t)
+        # 7) Regresar un objeto ExpressionResult con la dirección
+        return ExpressionResult(temp_address, result_t)
 
     # Entradas de alto nivel
     def generate_program(self, program_tree: Tree) -> IntermediateCodeContext:
@@ -193,14 +207,13 @@ class ExpressionQuadrupleGenerator:
             elif child.data == "body":
                 self._generate_body(child)
 
-    # Estatutos lineales
     def _generate_assign(self, assign_tree: Tree) -> None:
         """
         assign: ID ASSIGN expression SEMICOL
         """
         children = assign_tree.children
 
-        # Variable destino
+        # 1) Variable destino (ID)
         variable_token = children[0]
         if not isinstance(variable_token, Token) or variable_token.type != "ID":
             raise ValueError("Primer hijo de 'assign' debe ser ID.")
@@ -212,20 +225,36 @@ class ExpressionQuadrupleGenerator:
         )
         left_type: TypeName = variable_info.var_type
 
-        # Expresión del lado derecho (nodo 'expression')
-        expression_tree = children[2]
-        if not isinstance(expression_tree, Tree) or expression_tree.data != "expression":
-            raise ValueError("Tercer hijo de 'assign' debe ser un Tree('expression').")
+        # 2) Busca la expresión del lado derecho
+        expression_tree: Optional[Tree] = None
+        for child in children:
+            if isinstance(child, Tree) and child.data == "expression":
+                expression_tree = child
+                break
 
+        if expression_tree is None:
+            raise ValueError("assign sin expresión del lado derecho.")
+
+        # 3) Genera cuádruplos para la expresión
         expression_result = self._generate_expression(expression_tree)
         right_type: TypeName = expression_result.result_type
 
-        # Validación de tipos
+        # 4) Validación de tipos
         assert_assign(left_type, right_type, context="assign")
 
-        # Cuádruplo ASSIGN
+        # 5) Cuádruplo ASSIGN usando direcciones virtuales
+        if variable_info.virtual_address is None:
+            raise SemanticError(
+                f"Variable '{variable_name}' no tiene dirección virtual asignada."
+            )
+
         self.context.quadruples.enqueue(
-            Quadruple("ASSIGN", expression_result.name, None, variable_name)
+            Quadruple(
+                "ASSIGN",
+                expression_result.address, # dirección del valor calculado
+                None,
+                variable_info.virtual_address, # dirección de la variable destino
+            )
         )
 
     def _generate_print_stmt(self, print_stmt_tree: Tree) -> None:
@@ -235,6 +264,7 @@ class ExpressionQuadrupleGenerator:
         """
         print_args_tree: Optional[Tree] = None
 
+        # Localiza el nodo print_args
         for child in print_stmt_tree.children:
             if isinstance(child, Tree) and child.data == "print_args":
                 print_args_tree = child
@@ -245,43 +275,55 @@ class ExpressionQuadrupleGenerator:
 
         children = print_args_tree.children
 
-        # Caso: print("texto");
-        if len(children) == 1 and isinstance(children[0], Token) and children[0].type == "CTE_STRING":
+        # Caso 1: print("texto")
+        if (
+            len(children) == 1
+            and isinstance(children[0], Token)
+            and children[0].type == "CTE_STRING"
+        ):
+            string_token = children[0]
+            # Guarda el string en el segmento de constantes STRING
+            string_address = self.virtual_memory.allocate_constant(
+                string_token.value,
+                "STRING", # Tipo lógico para strings en la tabla de constantes
+            )
             self.context.quadruples.enqueue(
-                Quadruple("PRINT", children[0].value, None, None)
+                Quadruple("PRINT", string_address, None, None)
             )
             return
 
-        # Caso: print(expr); o print(expr, "texto");
+        # Caso 2: print(expr) o print(expr, "texto")
         expression_tree = children[0]
         if not isinstance(expression_tree, Tree) or expression_tree.data != "expression":
-            raise ValueError("print_args debe comenzar con un Tree('expression').")
+            raise ValueError(
+                "print_args mal formado: se esperaba expression o CTE_STRING."
+            )
 
         expr_result = self._generate_expression(expression_tree)
         self.context.quadruples.enqueue(
-            Quadruple("PRINT", expr_result.name, None, None)
+            Quadruple("PRINT", expr_result.address, None, None)
         )
 
         # Si hay coma y string, lo imprime después
         if len(children) >= 3:
             last = children[-1]
             if isinstance(last, Token) and last.type == "CTE_STRING":
+                string_address = self.virtual_memory.allocate_constant(
+                    last.value,
+                    "STRING",
+                )
                 self.context.quadruples.enqueue(
-                    Quadruple("PRINT", last.value, None, None)
+                    Quadruple("PRINT", string_address, None, None)
                 )
 
     def _generate_fcall(self, fcall_tree: Tree) -> None:
         """
         fcall: ID LPAREN args RPAREN SEMICOL
-        Genera:
-            (ARG, valor1, None, 1)
-            ...
-            (ARG, valorn, None, n)
-            (CALL, nombre_función, n, None)
         """
         function_name: Optional[str] = None
         args_tree: Optional[Tree] = None
 
+        # Extrae el nombre de la función y el nodo args
         for child in fcall_tree.children:
             if isinstance(child, Token) and child.type == "ID":
                 function_name = child.value
@@ -296,6 +338,7 @@ class ExpressionQuadrupleGenerator:
         function_info = self.function_directory.get_function(function_name)
         parameter_list = function_info.parameter_list
 
+        # Genera ExpressionResult para cada argumento
         argument_results = self._generate_args(args_tree)
 
         expected_count = len(parameter_list)
@@ -307,7 +350,7 @@ class ExpressionQuadrupleGenerator:
                 f"pero se esperaban {expected_count}."
             )
 
-        # ARG para cada argumento
+        # Validación de tipos y generación de cuádruplos ARG
         for position, (arg_result, param_info) in enumerate(
             zip(argument_results, parameter_list),
             start=1,
@@ -319,7 +362,7 @@ class ExpressionQuadrupleGenerator:
             )
 
             self.context.quadruples.enqueue(
-                Quadruple("ARG", arg_result.name, None, position)
+                Quadruple("ARG", arg_result.address, None, position)
             )
 
         # CALL final
@@ -367,37 +410,38 @@ class ExpressionQuadrupleGenerator:
         then_body_tree = body_nodes[0]
         else_body_tree = body_nodes[1] if len(body_nodes) > 1 else None
 
+        # Genera código para la condición
         condition_result = self._generate_expression(expression_tree)
         ensure_bool(condition_result.result_type, context="if condition")
 
         # GOTOF cond, -, destino (se rellena después)
         gotof_index = len(self.context.quadruples)
         self.context.quadruples.enqueue(
-            Quadruple("GOTOF", condition_result.name, None, None)
+            Quadruple("GOTOF", condition_result.address, None, None)
         )
 
-        # then
+        # THEN
         self._generate_body(then_body_tree)
 
         if else_body_tree is not None:
-            # GOTO para saltar el else cuando el if fue verdadero
+            # GOTO para saltar el else al final del if
             goto_end_index = len(self.context.quadruples)
             self.context.quadruples.enqueue(
                 Quadruple("GOTO", None, None, None)
             )
 
-            # El else empieza aquí
+            # Rellena el GOTOF para que apunte al inicio del else
             else_start_index = len(self.context.quadruples)
             self.context.quadruples.update_result(gotof_index, else_start_index)
 
-            # else
+            # ELSE
             self._generate_body(else_body_tree)
 
-            # Fin del if/else
+            # Rellena el GOTO de salida del if/else
             end_index = len(self.context.quadruples)
             self.context.quadruples.update_result(goto_end_index, end_index)
         else:
-            # Sin else: GOTOF salta al final del if
+            # No hay else: GOTOF salta directo al final
             end_index = len(self.context.quadruples)
             self.context.quadruples.update_result(gotof_index, end_index)
 
@@ -415,10 +459,11 @@ class ExpressionQuadrupleGenerator:
         body_tree: Optional[Tree] = None
 
         for child in children:
-            if isinstance(child, Tree) and child.data == "expression":
-                expression_tree = child
-            elif isinstance(child, Tree) and child.data == "body":
-                body_tree = child
+            if isinstance(child, Tree):
+                if child.data == "expression":
+                    expression_tree = child
+                elif child.data == "body":
+                    body_tree = child
 
         if expression_tree is None or body_tree is None:
             raise ValueError("cycle mal formado (falta expresión o body).")
@@ -429,7 +474,7 @@ class ExpressionQuadrupleGenerator:
         # GOTOF cond, -, destino_salida (se rellena después)
         gotof_index = len(self.context.quadruples)
         self.context.quadruples.enqueue(
-            Quadruple("GOTOF", condition_result.name, None, None)
+            Quadruple("GOTOF", condition_result.address, None, None)
         )
 
         # Body del ciclo
@@ -555,13 +600,12 @@ class ExpressionQuadrupleGenerator:
 
         # Caso sign_opt primary
         if len(children) == 2:
-            sign_opt_tree, primary_tree = children
+            sign_opt_tree = children[0]
+            primary_tree = children[1]
 
             primary_result = self._generate_primary(primary_tree)
 
-            if not isinstance(sign_opt_tree, Tree) or sign_opt_tree.data != "sign_opt":
-                raise ValueError("factor: se esperaba nodo 'sign_opt'.")
-
+            # sign_opt puede venir vacío
             sign_token: Optional[Token] = (
                 sign_opt_tree.children[0] if sign_opt_tree.children else None
             )
@@ -572,11 +616,15 @@ class ExpressionQuadrupleGenerator:
 
             # Signo '-': genera UMINUS
             if sign_token.type == "MINUS":
-                temp_name = self.context.temporary_generator.new_temporary()
+                # Pide un temporal del mismo tipo que el primary
+                temp_address = self.virtual_memory.allocate_temporary(primary_result.result_type)
+
+                # Genera el cuádruplo UMINUS usando direcciones
                 self.context.quadruples.enqueue(
-                    Quadruple("UMINUS", primary_result.name, None, temp_name)
+                    Quadruple("UMINUS", primary_result.address, None, temp_address)
                 )
-                return ExpressionResult(temp_name, primary_result.result_type)
+
+                return ExpressionResult(temp_address, primary_result.result_type)
 
         raise ValueError(f"Forma inesperada de factor: {children!r}")
 
@@ -586,6 +634,7 @@ class ExpressionQuadrupleGenerator:
         """
         child = primary_tree.children[0]
 
+        # Caso ID: variable
         if isinstance(child, Token) and child.type == "ID":
             variable_name = child.value
 
@@ -594,8 +643,15 @@ class ExpressionQuadrupleGenerator:
                 current_function_name=self.current_function_name,
             )
 
-            return ExpressionResult(variable_name, variable_info.var_type)
+            # Debe tener una dirección virtual asignada
+            if variable_info.virtual_address is None:
+                raise SemanticError(
+                    f"Variable '{variable_name}' no tiene dirección virtual asignada."
+                )
 
+            return ExpressionResult(variable_info.virtual_address, variable_info.var_type)
+
+        # Caso literal numérico
         if isinstance(child, Tree) and child.data == "number":
             return self._generate_number(child)
 
@@ -609,9 +665,14 @@ class ExpressionQuadrupleGenerator:
         if not isinstance(token, Token):
             raise ValueError("number debe contener un token literal.")
 
+        # INT -> segmento de constantes enteras
         if token.type == "CTE_INT":
-            return ExpressionResult(token.value, INT)
+            address = self.virtual_memory.allocate_constant(token.value, INT)
+            return ExpressionResult(address, INT)
+
+        # FLOAT -> segmento de constantes flotantes
         if token.type == "CTE_FLOAT":
-            return ExpressionResult(token.value, FLOAT)
+            address = self.virtual_memory.allocate_constant(token.value, FLOAT)
+            return ExpressionResult(address, FLOAT)
 
         raise ValueError(f"Token inesperado en number: {token!r}")

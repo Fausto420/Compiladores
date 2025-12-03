@@ -32,7 +32,7 @@ void foo(p: int, q: float) [
 main {
     a = 2;
     b = 3;
-    c = a + b * 4;
+    c = a + b * 2;
     print(c, " result");
 
     if (c > 10) {

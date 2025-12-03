@@ -1,7 +1,7 @@
 from lark.exceptions import UnexpectedInput
 from parse_and_scan import parse, scan
 
-DEMO = """\
+DEMO = """
 program demo;
 vars:
     a, b, c: int;
@@ -18,8 +18,8 @@ void foo(p: int, q: float) [
 main {
     a = 2;
     b = 3;
-    c = a + b * 4;
-    print(c, " result");
+    c = a + b * 2;
+    x = 3.5;
 
     if (c > 10) {
         print("big");

@@ -2,6 +2,7 @@ from parse_and_scan import parse
 from builder import build_symbol_tables
 from intermediate_code_structures import IntermediateCodeContext
 from expression_to_quads import ExpressionQuadrupleGenerator
+from virtual_memory import VirtualMemory, assign_variable_addresses
 
 
 def generate_quadruples(source_code: str) -> IntermediateCodeContext:
@@ -16,21 +17,24 @@ def generate_quadruples(source_code: str) -> IntermediateCodeContext:
     parse_tree = parse(source_code)
 
     # 2) Directorio de funciones y variables (semántica de la entrega 2)
-    # build_symbol_tables vuelve a llamar parse(source_code) internamente.
-    # Se mantiene así para reutilizar la función en otros contextos.
     function_directory = build_symbol_tables(parse, source_code)
 
-    # 3) Contexto de código intermedio
+    # 3) Memoria virtual y asignación de direcciones a variables
+    virtual_memory = VirtualMemory()
+    assign_variable_addresses(function_directory, virtual_memory)
+
+    # 4) Contexto de código intermedio
     context = IntermediateCodeContext()
 
-    # 4) Generador de cuádruplos para expresiones + estatutos
+    # 5) Generador de cuádruplos para expresiones + estatutos
     generator = ExpressionQuadrupleGenerator(
         function_directory=function_directory,
         context=context,
+        virtual_memory=virtual_memory,
     )
 
-    # 5) Recorre el árbol completo del programa
+    # 6) Recorre el árbol completo del programa
     generator.generate_program(parse_tree)
 
-    # 6) Regresa el contexto ya lleno de cuádruplos
+    # 7) Regresa el contexto ya lleno de cuádruplos
     return context
