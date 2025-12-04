@@ -1,6 +1,7 @@
 from typing import List, Optional, Any
 from intermediate_code_structures import Quadruple
 from execution_memory import ExecutionMemory, ActivationRecord
+from virtual_memory import LOCAL_INT_START, TEMP_INT_START
 
 class VirtualMachine:
     """
@@ -202,8 +203,6 @@ class VirtualMachine:
         Si llega aquí vía GOSUB, el frame ya está activo y simplemente avanza.
         Si llega aquí por ejecución secuencial (al inicio del programa), debe
         saltar al ENDFUNC correspondiente para evitar ejecutar la función sin llamarla.
-
-        Formato esperado: (BEGINFUNC, function_name, None, None)
         """
         # Si el call stack tiene más de 1 frame, significa que estamos dentro de una llamada
         if len(self.memory.call_stack) > 1:
@@ -252,7 +251,6 @@ class VirtualMachine:
         Retorna la primera dirección virtual LOCAL usada por la función
         (o 0 si no hay variables locales).
         """
-        from virtual_memory import LOCAL_INT_START, TEMP_INT_START
 
         # Sin function_directory, usar 0 como base
         if not self.function_directory:
