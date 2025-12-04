@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 from typing import Dict, Tuple, Optional
-
 from semantics import (
     FunctionDirectory,
     VariableInfo,
@@ -11,7 +10,8 @@ from semantics import (
     VOID,
 )
 
-# Rangos de direcciones virtuales
+# Rangos de direcciones virtuales (inicio de cada segmento)
+# GLOBAL: 1000-3999, LOCAL: 4000-6999, TEMP: 7000-9999, CONST: 10000-12999
 GLOBAL_INT_START = 1000
 GLOBAL_FLOAT_START = 2000
 GLOBAL_BOOL_START = 3000
