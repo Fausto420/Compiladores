@@ -1,0 +1,29 @@
+programa fibonacci_test;
+vars:
+    n, i, limit: entero;
+    a, b, temp: entero;
+
+inicio {
+    n = 10;
+    a = 0;
+    b = 1;
+
+    escribe(a);
+    escribe(b);
+
+    limit = n - 2;
+    i = 0;
+
+    mientras (i < limit) haz {
+        temp = a + b;
+        a = b;
+        b = temp;
+
+        [
+            escribe(b);
+        ]
+
+        i = i + 1;
+    };
+}
+fin

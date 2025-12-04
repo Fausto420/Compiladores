@@ -45,11 +45,6 @@ class SemanticBuilder(Transformer):
     - El directorio de funciones del programa (FunctionDirectory).
     - La tabla de variables globales.
     - Las tablas de variables locales para cada función.
-
-    Este builder se encarga solo de las declaraciones:
-    - Declaración del programa (program).
-    - Declaraciones de variables (vars_section, decvar).
-    - Declaraciones de funciones (func_decl) y parámetros (params).
     """
 
     def __init__(self, function_directory: Optional[FunctionDirectory] = None):

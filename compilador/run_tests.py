@@ -236,7 +236,7 @@ def main():
     test_dir = script_dir / "test_programs"
 
     if not test_dir.exists():
-        print(f"❌ Error: Directorio de tests no encontrado: {test_dir}")
+        print(f" Error: Directorio de tests no encontrado: {test_dir}")
         sys.exit(1)
 
     # Run tests
