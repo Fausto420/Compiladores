@@ -88,41 +88,20 @@ class QuadrupleQueue:
             print(f"{index}: {quad}")
 
 
-class TemporaryVariableGenerator:
-    """
-    Genera nombres de variables temporales para guardar resultados
-    intermedios de expresiones. Por ejemplo: t1, t2, t3, etc.
-    """
-
-    def __init__(self, prefix: str = "t") -> None:
-        # Prefijo que se usará para nombrar los temporales (por defecto: "t").
-        self.prefix: str = prefix
-        # Contador interno para ir generando t1, t2, t3, ...
-        self.counter: int = 0
-
-    def new_temporary(self) -> str:
-        self.counter += 1
-        return f"{self.prefix}{self.counter}"
-
-
 @dataclass
 class IntermediateCodeContext:
     """
     Agrupa todas las estructuras de datos necesarias para generar el código intermedio de un programa.
 
     - operator_stack: PILA de operadores (PLUS, MINUS, ASSIGN, etc.).
-    - operand_stack: PILA de operandos (nombres de variables, temporales, constantes).
+    - operand_stack: PILA de operandos (direcciones virtuales de variables, temporales, constantes).
     - type_stack: PILA de tipos para cada operando (INT, FLOAT, BOOL).
     - quadruples: FILA de cuádruplos generados.
-    - temporary_generator: generador de nombres de temporales (t1, t2, ...).
     """
     operator_stack: Stack = field(default_factory=lambda: Stack("OPERATORS"))
     operand_stack: Stack = field(default_factory=lambda: Stack("OPERANDS"))
     type_stack: Stack = field(default_factory=lambda: Stack("TYPES"))
     quadruples: QuadrupleQueue = field(default_factory=QuadrupleQueue)
-    temporary_generator: TemporaryVariableGenerator = field(
-        default_factory=TemporaryVariableGenerator
-    )
 
     def push_operand(self, operand: Any, operand_type: TypeName) -> None:
         """

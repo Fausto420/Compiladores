@@ -1,0 +1,12 @@
+programa void_in_expr;
+vars:
+    x: entero;
+
+nula printValue(val: entero) {
+    escribe(val);
+};
+
+inicio {
+    x = printValue(5);
+}
+fin

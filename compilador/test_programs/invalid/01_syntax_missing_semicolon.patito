@@ -1,0 +1,9 @@
+programa syntax_error;
+vars:
+    x: entero;
+
+inicio {
+    x = 5
+    escribe(x);
+}
+fin

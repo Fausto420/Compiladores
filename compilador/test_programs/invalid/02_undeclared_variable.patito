@@ -1,0 +1,10 @@
+programa undeclared_var;
+vars:
+    x: entero;
+
+inicio {
+    x = 5;
+    y = 10;
+    escribe(y);
+}
+fin

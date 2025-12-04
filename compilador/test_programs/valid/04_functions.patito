@@ -1,0 +1,32 @@
+programa functions_test;
+vars:
+    num1, num2, result: entero;
+
+entero add(a: entero, b: entero) {
+    return a + b;
+};
+
+entero multiply(x: entero, y: entero) {
+    return x * y;
+};
+
+nula printValue(val: entero) {
+    escribe(val);
+};
+
+inicio {
+    num1 = 5;
+    num2 = 3;
+
+    result = add(num1, num2);
+    escribe(result);
+
+    result = multiply(num1, num2);
+    escribe(result);
+
+    printValue(result);
+
+    result = add(multiply(2, 3), 4);
+    escribe(result);
+}
+fin

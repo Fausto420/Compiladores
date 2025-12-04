@@ -116,41 +116,51 @@ class VirtualMemory:
         return value
 
     # VARIABLES Y TEMPORALES
+    def _get_segment_name(self, scope: str, variable_type: TypeName) -> str:
+        """
+        Construye el nombre del segmento de memoria basado en el scope y tipo.
+
+        Args:
+            scope: Uno de "global", "local", o "temp"
+            variable_type: Tipo de dato (INT, FLOAT, BOOL)
+
+        Returns:
+            Nombre del atributo del counter (ej: "global_int", "local_float")
+
+        Raises:
+            ValueError: Si el tipo no es soportado
+        """
+        type_suffix_map = {
+            INT: "int",
+            FLOAT: "float",
+            BOOL: "bool",
+        }
+
+        if variable_type not in type_suffix_map:
+            raise ValueError(f"Tipo no soportado para {scope}: {variable_type}")
+
+        return f"{scope}_{type_suffix_map[variable_type]}"
+
     def allocate_global(self, variable_type: TypeName) -> int:
         """
         Asigna una dirección virtual para una variable GLOBAL según su tipo.
         """
-        if variable_type == INT:
-            return self._allocate_from_segment("global_int")
-        if variable_type == FLOAT:
-            return self._allocate_from_segment("global_float")
-        if variable_type == BOOL:
-            return self._allocate_from_segment("global_bool")
-        raise ValueError(f"Tipo no soportado para variable global: {variable_type}")
+        segment_name = self._get_segment_name("global", variable_type)
+        return self._allocate_from_segment(segment_name)
 
     def allocate_local(self, variable_type: TypeName) -> int:
         """
         Asigna una dirección virtual para una variable LOCAL según su tipo.
         """
-        if variable_type == INT:
-            return self._allocate_from_segment("local_int")
-        if variable_type == FLOAT:
-            return self._allocate_from_segment("local_float")
-        if variable_type == BOOL:
-            return self._allocate_from_segment("local_bool")
-        raise ValueError(f"Tipo no soportado para variable local: {variable_type}")
+        segment_name = self._get_segment_name("local", variable_type)
+        return self._allocate_from_segment(segment_name)
 
     def allocate_temporary(self, temp_type: TypeName) -> int:
         """
         Asigna una dirección virtual para un TEMPORAL según su tipo.
         """
-        if temp_type == INT:
-            return self._allocate_from_segment("temp_int")
-        if temp_type == FLOAT:
-            return self._allocate_from_segment("temp_float")
-        if temp_type == BOOL:
-            return self._allocate_from_segment("temp_bool")
-        raise ValueError(f"Tipo no soportado para temporal: {temp_type}")
+        segment_name = self._get_segment_name("temp", temp_type)
+        return self._allocate_from_segment(segment_name)
 
     # CONSTANTES
     def allocate_constant(self, literal_value: str, const_type: TypeName) -> int:

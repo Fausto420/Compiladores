@@ -1,0 +1,11 @@
+programa non_bool_condition;
+vars:
+    x: entero;
+
+inicio {
+    x = 5;
+    si (x) {
+        escribe(x);
+    };
+}
+fin

@@ -8,6 +8,14 @@ from virtual_memory import (
 )
 
 
+# Mapeo de tipos a sufijos de listas de almacenamiento y valores por defecto
+TYPE_STORAGE_MAP = {
+    "int": ("ints", 0),
+    "float": ("floats", 0.0),
+    "bool": ("bools", False),
+    "string": ("strings", "")
+}
+
 class ActivationRecord:
     """
     Registro de activación (call frame) para una función.
@@ -136,25 +144,19 @@ class ExecutionMemory:
         segment_lower = segment.lower()
         type_lower = data_type.lower()
 
-        # Mapeo de tipos a listas de almacenamiento
-        type_map = {
-            "int": ("ints", 0),
-            "float": ("floats", 0.0),
-            "bool": ("bools", False),
-            "string": ("strings", "")
-        }
-
-        if type_lower not in type_map:
+        if type_lower not in TYPE_STORAGE_MAP:
             raise ValueError(f"Tipo de dato inválido: {data_type}")
+
+        type_suffix = TYPE_STORAGE_MAP[type_lower][0]
 
         # GLOBAL: acceso directo
         if segment_lower == "global":
-            storage_attr = f"global_{type_map[type_lower][0]}"
+            storage_attr = f"global_{type_suffix}"
             return (getattr(self, storage_attr), original_offset)
 
         # CONSTANT: acceso directo
         if segment_lower == "constant":
-            storage_attr = f"const_{type_map[type_lower][0]}"
+            storage_attr = f"const_{type_suffix}"
             return (getattr(self, storage_attr), original_offset)
 
         # LOCAL y TEMP: requieren frame actual y ajuste de offset
@@ -165,7 +167,7 @@ class ExecutionMemory:
             current_frame = self.call_stack[-1]
 
             # Obtener la lista de almacenamiento del frame
-            storage_attr = f"{segment_lower}_{type_map[type_lower][0]}"
+            storage_attr = f"{segment_lower}_{type_suffix}"
             storage_list = getattr(current_frame, storage_attr)
 
             # Ajustar offset usando la base del frame
@@ -219,16 +221,9 @@ class ExecutionMemory:
         segment, data_type, offset = self.decode_address(virtual_address)
         storage_list, adjusted_offset = self._get_storage_list_and_adjusted_offset(segment, data_type, offset)
 
-        if data_type == "INT":
-            default_value = 0
-        elif data_type == "FLOAT":
-            default_value = 0.0
-        elif data_type == "BOOL":
-            default_value = False
-        elif data_type == "STRING":
-            default_value = ""
-        else:
-            default_value = None
+        # Obtener el valor por defecto del mapeo de tipos
+        type_lower = data_type.lower()
+        default_value = TYPE_STORAGE_MAP.get(type_lower, (None, None))[1]
 
         self._ensure_capacity(storage_list, adjusted_offset, default_value)
 

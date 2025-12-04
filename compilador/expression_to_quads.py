@@ -21,6 +21,23 @@ from intermediate_code_structures import (
 from virtual_memory import VirtualMemory
 
 
+# Helper functions for tree traversal (reusable within this module)
+def _find_child_tree(children: list, data_name: str) -> Optional[Tree]:
+    """Encuentra el primer hijo Tree con el data attribute especificado."""
+    for child in children:
+        if isinstance(child, Tree) and child.data == data_name:
+            return child
+    return None
+
+
+def _find_token(children: list, token_type: str) -> Optional[Token]:
+    """Encuentra el primer Token con el tipo especificado."""
+    for child in children:
+        if isinstance(child, Token) and child.type == token_type:
+            return child
+    return None
+
+
 # Resultado de subexpresiones
 @dataclass
 class ExpressionResult:
@@ -151,24 +168,16 @@ class ExpressionQuadrupleGenerator:
         """
         func_decl: tipo_retorno ID PAREN_IZQ params? PAREN_DER LLAVE_IZQ vars_seccion? estatutos LLAVE_DER PUNTO_COMA
         """
-        function_name: Optional[str] = None
-        estatutos_tree: Optional[Tree] = None
+        children = func_decl_tree.children
 
         # Busca el nombre (ID)
-        for child in func_decl_tree.children:
-            if isinstance(child, Token) and child.type == "ID":
-                function_name = child.value
-                break
-
-        if function_name is None:
+        function_name_token = _find_token(children, "ID")
+        if function_name_token is None:
             raise ValueError("func_decl sin ID de función.")
+        function_name = function_name_token.value
 
         # Busca el nodo estatutos
-        for child in func_decl_tree.children:
-            if isinstance(child, Tree) and child.data == "estatutos":
-                estatutos_tree = child
-                break
-
+        estatutos_tree = _find_child_tree(children, "estatutos")
         if estatutos_tree is None:
             raise ValueError(f"func_decl de '{function_name}' sin estatutos.")
 
@@ -310,14 +319,8 @@ class ExpressionQuadrupleGenerator:
         imprime: ESCRIBE PAREN_IZQ args_imprime PAREN_DER PUNTO_COMA
         args_imprime: (expresion (COMA expresion)*) | (CTE_STRING (COMA expresion)?)
         """
-        args_imprime_tree: Optional[Tree] = None
-
         # Localiza el nodo args_imprime
-        for child in imprime_tree.children:
-            if isinstance(child, Tree) and child.data == "args_imprime":
-                args_imprime_tree = child
-                break
-
+        args_imprime_tree = _find_child_tree(imprime_tree.children, "args_imprime")
         if args_imprime_tree is None:
             raise ValueError("imprime sin args_imprime.")
 
@@ -427,18 +430,16 @@ class ExpressionQuadrupleGenerator:
         """
         llamada_func: ID PAREN_IZQ args? PAREN_DER PUNTO_COMA
         """
-        function_name: Optional[str] = None
-        args_tree: Optional[Tree] = None
+        children = llamada_func_tree.children
 
-        # Extrae el nombre de la función y el nodo args
-        for child in llamada_func_tree.children:
-            if isinstance(child, Token) and child.type == "ID":
-                function_name = child.value
-            elif isinstance(child, Tree) and child.data == "args":
-                args_tree = child
-
-        if function_name is None:
+        # Extrae el nombre de la función
+        function_name_token = _find_token(children, "ID")
+        if function_name_token is None:
             raise ValueError("llamada_func sin nombre de función.")
+        function_name = function_name_token.value
+
+        # Extrae el nodo args (puede ser None)
+        args_tree = _find_child_tree(children, "args")
 
         # Prepara y valida la llamada
         function_info, argument_results = self._prepare_function_call(function_name, args_tree)
@@ -632,6 +633,45 @@ class ExpressionQuadrupleGenerator:
         end_index = len(self.context.quadruples)
         self.context.quadruples.update_result(gotof_index, end_index)
 
+    def _generate_binary_sequence(
+        self,
+        children: list,
+        element_generator,
+    ) -> ExpressionResult:
+        """
+        Maneja la generación de una secuencia de operaciones binarias con el patrón:
+        elemento (operador elemento)*
+
+        Args:
+            children: Lista de hijos del árbol (elemento, operador, elemento, operador, ...)
+            element_generator: Función para generar cada elemento individual
+
+        Returns:
+            ExpressionResult con el resultado acumulado de todas las operaciones
+        """
+        # Primer elemento
+        current_result = element_generator(children[0])
+
+        # Procesa pares (operador, elemento)
+        index = 1
+        while index < len(children):
+            operator_token = children[index]
+            right_element_tree = children[index + 1]
+
+            operator_name = operator_token.type
+            right_result = element_generator(right_element_tree)
+
+            # Genera el cuádruplo utilizando las pilas
+            current_result = self._emit_binary_operation(
+                operator_name,
+                current_result,
+                right_result,
+            )
+
+            index += 2
+
+        return current_result
+
     def _generate_expresion(self, expresion_tree: Tree) -> ExpressionResult:
         """
         expresion: exp_simple cola_relacional?
@@ -675,56 +715,19 @@ class ExpressionQuadrupleGenerator:
         """
         exp_simple: termino ((MAS | MENOS) termino)*
         """
-        children = exp_simple_tree.children
-
-        # Primer término
-        current_result = self._generate_termino(children[0])
-
-        index = 1
-        while index < len(children):
-            operator_token = children[index]
-            right_termino_tree = children[index + 1]
-
-            operator_name = operator_token.type  # MAS o MENOS
-            right_result = self._generate_termino(right_termino_tree)
-
-            # Genera el cuádruplo utilizando las pilas
-            current_result = self._emit_binary_operation(
-                operator_name,
-                current_result,
-                right_result,
-            )
-
-            index += 2
-
-        return current_result
+        return self._generate_binary_sequence(
+            exp_simple_tree.children,
+            self._generate_termino
+        )
 
     def _generate_termino(self, termino_tree: Tree) -> ExpressionResult:
         """
         termino: factor ((POR | ENTRE) factor)*
         """
-        children = termino_tree.children
-
-        current_result = self._generate_factor(children[0])
-
-        index = 1
-        while index < len(children):
-            operator_token = children[index]
-            right_factor_tree = children[index + 1]
-
-            operator_name = operator_token.type  # POR o ENTRE
-            right_result = self._generate_factor(right_factor_tree)
-
-            # Genera el cuádruplo utilizando las pilas
-            current_result = self._emit_binary_operation(
-                operator_name,
-                current_result,
-                right_result,
-            )
-
-            index += 2
-
-        return current_result
+        return self._generate_binary_sequence(
+            termino_tree.children,
+            self._generate_factor
+        )
     
     def _generate_function_call_expression(
         self,

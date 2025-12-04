@@ -1,0 +1,26 @@
+programa mixed_types_test;
+vars:
+    int_val: entero;
+    float_val, result: flotante;
+
+flotante divide(a: entero, b: entero) {
+    return a / b;
+};
+
+inicio {
+    int_val = 10;
+    float_val = 3.14;
+
+    result = float_val * 2.0;
+    escribe(result);
+
+    result = int_val + float_val;
+    escribe(result);
+
+    result = divide(10, 3);
+    escribe(result);
+
+    result = float_val / 2.0;
+    escribe(result);
+}
+fin

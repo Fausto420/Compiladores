@@ -1,0 +1,9 @@
+programa duplicate_var;
+vars:
+    x: entero;
+    x: flotante;
+
+inicio {
+    x = 5;
+}
+fin

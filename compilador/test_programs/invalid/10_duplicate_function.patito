@@ -1,0 +1,14 @@
+programa duplicate_func;
+
+entero foo() {
+    return 5;
+};
+
+entero foo() {
+    return 10;
+};
+
+inicio {
+    escribe(foo());
+}
+fin

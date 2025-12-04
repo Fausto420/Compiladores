@@ -1,0 +1,13 @@
+programa wrong_args;
+vars:
+    x: entero;
+
+entero add(a: entero, b: entero) {
+    return a + b;
+};
+
+inicio {
+    x = add(5);
+    escribe(x);
+}
+fin

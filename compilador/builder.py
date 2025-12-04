@@ -1,5 +1,5 @@
 from typing import Optional, List, Tuple
-from lark import Transformer, Token
+from lark import Transformer, Token, Tree
 from semantics import (
     FunctionDirectory,
     TypeName,
@@ -9,6 +9,34 @@ from semantics import (
     InvalidTypeError,
     SemanticError,
 )
+
+
+# Helper functions for tree traversal
+def find_child_tree(children: list, data_name: str) -> Optional[Tree]:
+    """
+    Encuentra el primer hijo Tree con el data attribute especificado.
+    """
+    for child in children:
+        if isinstance(child, Tree) and child.data == data_name:
+            return child
+    return None
+
+
+def find_token(children: list, token_type: str) -> Optional[Token]:
+    """
+    Encuentra el primer Token con el tipo especificado.
+    """
+    for child in children:
+        if isinstance(child, Token) and child.type == token_type:
+            return child
+    return None
+
+
+def find_all_trees(children: list, data_name: str) -> List[Tree]:
+    """
+    Encuentra todos los hijos Tree con el data attribute especificado.
+    """
+    return [child for child in children if isinstance(child, Tree) and child.data == data_name]
 
 class SemanticBuilder(Transformer):
     """
@@ -39,13 +67,11 @@ class SemanticBuilder(Transformer):
         Transforma la lista de IDs en una lista de strings con
         los nombres de las variables.
         """
-        identifier_names: List[str] = []
-
-        for element in children:
-            if isinstance(element, Token) and element.type == "ID":
-                identifier_names.append(element.value)
-
-        return identifier_names
+        return [
+            token.value
+            for token in children
+            if isinstance(token, Token) and token.type == "ID"
+        ]
 
     def tipo(self, children):
         """
@@ -63,11 +89,6 @@ class SemanticBuilder(Transformer):
     def tipo_retorno(self, children):
         """
         Convierte la regla 'tipo_retorno' de la gramática en un TypeName.
-
-        En la gramática: tipo_retorno: NULA | tipo
-        Casos:
-        - Si viene NULA, el hijo será un Token("NULA").
-        - Si viene un tipo (entero/flotante), el hijo será el string que regresa self.tipo(), es decir, INT o FLOAT.
         """
         child = children[0]
 
@@ -220,18 +241,13 @@ class SemanticBuilder(Transformer):
         - Las funciones ya se procesan en func_decl.
         - Al final, regresar el FunctionDirectory construido.
         """
-        program_name: Optional[str] = None
+        # Extraer las declaraciones globales de variables
         global_declarations: List[Tuple[List[str], TypeName]] = []
-
         for element in children:
-            if isinstance(element, Token) and element.type == "ID" and program_name is None:
-                program_name = element.value
-
-            # 'vars_seccion' produce una lista de ([nombres], tipo).
-            elif isinstance(element, list) and element:
+            # 'vars_seccion' produce una lista de ([nombres], tipo)
+            if isinstance(element, list) and element:
                 first_item = element[0]
-                # Identifica la estructura de vars_seccion:
-                # lista de tuplas ([nombres], tipo)
+                # Identifica la estructura de vars_seccion: lista de tuplas ([nombres], tipo)
                 if isinstance(first_item, tuple) and isinstance(first_item[0], list):
                     global_declarations = element
 

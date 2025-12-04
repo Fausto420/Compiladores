@@ -1,0 +1,25 @@
+programa loops_test;
+vars:
+    i, sum, j: entero;
+
+inicio {
+    i = 0;
+    sum = 0;
+
+    mientras (i < 5) haz {
+        sum = sum + i;
+        escribe(sum);
+        i = i + 1;
+    };
+
+    i = 1;
+    mientras (i < 3) haz {
+        j = 1;
+        mientras (j < 3) haz {
+            escribe(i * j);
+            j = j + 1;
+        };
+        i = i + 1;
+    };
+}
+fin

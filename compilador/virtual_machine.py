@@ -35,6 +35,36 @@ class VirtualMachine:
         # Frame pendiente preparado por ERA, esperando ser activado por GOSUB
         self.pending_frame: Optional[ActivationRecord] = None
 
+        # Tabla de despacho de operadores a métodos
+        self._operation_handlers = {
+            # Operaciones aritméticas
+            "MAS": self._execute_arithmetic,
+            "MENOS": self._execute_arithmetic,
+            "POR": self._execute_arithmetic,
+            "ENTRE": self._execute_arithmetic,
+            # Operaciones relacionales
+            "MAYOR": self._execute_relational,
+            "MENOR": self._execute_relational,
+            "IGUAL": self._execute_relational,
+            "DIFERENTE": self._execute_relational,
+            # Asignación
+            "ASSIGN": self._execute_assign,
+            # Impresión
+            "PRINT": self._execute_print,
+            # Control de flujo
+            "GOTO": self._execute_goto,
+            "GOTOF": self._execute_gotof,
+            # Operadores unarios
+            "UMINUS": self._execute_uminus,
+            # Marcadores de función
+            "BEGINFUNC": self._execute_beginfunc,
+            "ENDFUNC": self._execute_endfunc,
+            # Llamadas a función
+            "ERA": self._execute_era,
+            "PARAM": self._execute_param,
+            "GOSUB": self._execute_gosub,
+        }
+
     def run(self) -> None:
         """
         Ejecuta el programa completo desde el cuádruplo 0 hasta el final.
@@ -50,52 +80,15 @@ class VirtualMachine:
 
     def execute_quadruple(self, quad: Quadruple) -> None:
         """
-        Ejecuta un solo cuádruplo y avanza el instruction pointer.
+        Ejecuta un solo cuádruplo usando la tabla de despacho.
         """
         operator = quad.operator
+        handler = self._operation_handlers.get(operator)
 
-        # Operaciones aritméticas
-        if operator in ("MAS", "MENOS", "POR", "ENTRE"):
-            self._execute_arithmetic(quad)
-
-        # Operaciones relacionales
-        elif operator in ("MAYOR", "MENOR", "IGUAL", "DIFERENTE"):
-            self._execute_relational(quad)
-
-        # Asignación
-        elif operator == "ASSIGN":
-            self._execute_assign(quad)
-
-        # Impresión
-        elif operator == "PRINT":
-            self._execute_print(quad)
-
-        # Control de flujo
-        elif operator == "GOTO":
-            self._execute_goto(quad)
-        elif operator == "GOTOF":
-            self._execute_gotof(quad)
-
-        # Operadores unarios
-        elif operator == "UMINUS":
-            self._execute_uminus(quad)
-
-        # Marcadores de función
-        elif operator == "BEGINFUNC":
-            self._execute_beginfunc(quad)
-        elif operator == "ENDFUNC":
-            self._execute_endfunc(quad)
-
-        # Llamadas a función
-        elif operator == "ERA":
-            self._execute_era(quad)
-        elif operator == "PARAM":
-            self._execute_param(quad)
-        elif operator == "GOSUB":
-            self._execute_gosub(quad)
-
-        else:
+        if handler is None:
             raise ValueError(f"Operador no soportado: {operator}")
+
+        handler(quad)
 
     def _execute_arithmetic(self, quad: Quadruple) -> None:
         """

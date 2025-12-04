@@ -1,0 +1,22 @@
+programa nested_blocks_test;
+vars:
+    x, y: entero;
+
+inicio {
+    x = 5;
+    y = 10;
+
+    [
+        x = x + 1;
+        escribe(x);
+
+        [
+            y = y * 2;
+            escribe(y);
+        ]
+    ]
+
+    escribe(x);
+    escribe(y);
+}
+fin

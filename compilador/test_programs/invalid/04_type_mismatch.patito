@@ -1,0 +1,10 @@
+programa type_mismatch;
+vars:
+    x: entero;
+    y: flotante;
+
+inicio {
+    y = 3.14;
+    x = y;
+}
+fin

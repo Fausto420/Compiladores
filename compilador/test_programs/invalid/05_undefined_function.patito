@@ -1,0 +1,9 @@
+programa undefined_func;
+vars:
+    x: entero;
+
+inicio {
+    x = foo(5);
+    escribe(x);
+}
+fin

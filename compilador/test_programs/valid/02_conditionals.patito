@@ -1,0 +1,31 @@
+programa conditionals_test;
+vars:
+    x, y, max_val: entero;
+
+inicio {
+    x = 10;
+    y = 20;
+
+    si (x > y) {
+        escribe("x is greater");
+        max_val = x;
+    } sino {
+        escribe("y is greater or equal");
+        max_val = y;
+    };
+
+    si (x == 10) {
+        escribe("x is 10");
+    };
+
+    si (x != y) {
+        escribe("x and y are different");
+    };
+
+    si (x < y) {
+        si (x > 0) {
+            escribe("x is positive and less than y");
+        };
+    };
+}
+fin

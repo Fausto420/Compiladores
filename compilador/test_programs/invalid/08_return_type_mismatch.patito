@@ -1,0 +1,15 @@
+programa return_mismatch;
+vars:
+    x: entero;
+
+entero getNumber() {
+    vars:
+        y: flotante;
+    y = 3.14;
+    return y;
+};
+
+inicio {
+    x = getNumber();
+}
+fin

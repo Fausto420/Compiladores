@@ -146,7 +146,7 @@ def assert_assign(left_type: TypeName, right_type: TypeName, context: str = "ass
     if left_type == FLOAT:
         if right_type in (INT, FLOAT):
             return
-        raise InvalidTypeError(f"Tipos incomopatibles en {context}: FLOAT = {right_type}")
+        raise InvalidTypeError(f"Tipos incompatibles en {context}: FLOAT = {right_type}")
 
     raise InvalidTypeError(f"Tipo de Left-hand side no asignable: {left_type}")
 
@@ -233,7 +233,7 @@ class VariableTable:
                 f"Tipo de variable no soportado: {variable_type}"
             )
 
-        # Crea el objeto VariableInfo y lo guardam en el diccionario
+        # Crea el objeto VariableInfo y lo guarda en el diccionario
         self.variables[variable_name] = VariableInfo(
             name=variable_name,
             var_type=variable_type,
@@ -399,7 +399,8 @@ class FunctionDirectory:
             return self.global_variables.get_variable(variable_name)
 
         raise UnknownVariableError(
-            f"Variable '{variable_name}' no existe ni en la función '{current_function_name}' "f"ni en el scope global."
+            f"Variable '{variable_name}' no existe ni en la función '{current_function_name}' "
+            f"ni en el scope global."
         )
 
     def to_dict(self) -> dict:

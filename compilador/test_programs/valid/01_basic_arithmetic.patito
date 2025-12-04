@@ -1,0 +1,22 @@
+programa arithmetic_test;
+vars:
+    a, b, c: entero;
+    result: entero;
+
+inicio {
+    a = 10;
+    b = 5;
+
+    c = a + b;
+    escribe(c);
+
+    c = a - b;
+    escribe(c);
+
+    c = a * b;
+    escribe(c);
+
+    result = (a + b) * 2;
+    escribe(result);
+}
+fin

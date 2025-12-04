@@ -1,3 +1,4 @@
+from pathlib import Path
 from parse_and_scan import parse
 from builder import build_symbol_tables
 from semantics import SemanticError
@@ -5,77 +6,18 @@ from intermediate_code_structures import IntermediateCodeContext
 from expression_to_quads import ExpressionQuadrupleGenerator
 from virtual_memory import VirtualMemory, assign_variable_addresses
 
-DEMO = """
-programa demo;
-vars:
-    x, y, result: entero;
-    pi, area: flotante;
-
-entero square(n: entero) {
-    return n * n;
-};
-
-entero abs(value: entero) {
-    si (value < 0) {
-        return -value;
-    } sino {
-        return value;
-    };
-};
-
-flotante circleArea(radius: flotante) {
-    return radius * radius;
-};
-
-entero max(a: entero, b: entero) {
-    si (a > b) {
-        return a;
-    } sino {
-        return b;
-    };
-};
-
-nula printMessage(code: entero) {
-    si (code == 0) {
-        escribe("Success");
-        return;
-    };
-    escribe("Error");
-};
-
-inicio {
-    x = 5;
-    y = -3;
-
-    result = square(x);
-    escribe(result);
-
-    result = abs(y);
-    escribe(result);
-
-    result = max(x, y);
-    escribe(result);
-
-    pi = 3.14;
-    area = circleArea(pi);
-    escribe(area);
-
-    result = square(x) + abs(y);
-    escribe(result);
-
-    printMessage(0);
-    printMessage(1);
-}
-fin
-"""
 
 def main() -> None:
+    # Cargar el código fuente desde el archivo de ejemplo
+    demo_path = Path(__file__).parent / "examples" / "demo.patito"
+    source_code = demo_path.read_text(encoding="utf-8")
+
     try:
         # 1) Construye el árbol sintáctico con Lark
-        parse_tree = parse(DEMO)
+        parse_tree = parse(source_code)
 
         # 2) Construye las tablas semánticas (directorios de variables y funciones)
-        function_directory = build_symbol_tables(parse, DEMO)
+        function_directory = build_symbol_tables(parse, source_code)
 
         # 3) Crea la memoria virtual y asigna direcciones a TODAS las variables
         #    (globales, locales y parámetros) usando el FunctionDirectory.
