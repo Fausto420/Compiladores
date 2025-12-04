@@ -4,123 +4,133 @@
 WS: /[ \t\r\n]+/
 %ignore WS
 
-// Regex
+// Expresiones Regulares para Tokens
 ID: /[A-Za-z_][A-Za-z_0-9]*/
 CTE_FLOAT: /[0-9]+\.[0-9]+/
 CTE_INT: /[0-9]+/
 CTE_STRING: /"[^"\n]*"/
 
-// Palabras clave
-PROGRAM: "program"
+// Palabras Clave (TODAS EN ESPAÑOL)
+PROGRAMA: "programa"
 VARS: "vars"
-VOID: "void"
-MAIN: "main"
-END: "end"
-IF: "if"
-ELSE: "else"
-WHILE: "while"
-DO: "do"
-PRINT: "print"
+NULA: "nula"
+INICIO: "inicio"
+FIN: "fin"
+SI: "si"
+SINO: "sino"
+MIENTRAS: "mientras"
+HAZ: "haz"
+ESCRIBE: "escribe"
 RETURN: "return"
-INT: "int"
-FLOAT: "float"
+ENTERO: "entero"
+FLOTANTE: "flotante"
 
-// Operadores y separadores
-EQUAL: "=="
-NOTEQUAL: "!="
-ASSIGN: "="
-GREATER: ">"
-LESS: "<"
-PLUS: "+"
-MINUS: "-"
-STAR: "*"
-SLASH: "/"
-COLON: ":"
-COMMA: ","
-SEMICOL: ";"
+// Operadores y Separadores
+IGUAL: "=="
+DIFERENTE: "!="
+ASIGNA: "="
+MAYOR: ">"
+MENOR: "<"
+MAS: "+"
+MENOS: "-"
+POR: "*"
+ENTRE: "/"
+DOS_PUNTOS: ":"
+COMA: ","
+PUNTO_COMA: ";"
 
 // Agrupadores
-LPAREN: "("
-RPAREN: ")"
-LBRACE: "{"
-RBRACE: "}"
-LBRACKET: "["
-RBRACKET: "]"
+PAREN_IZQ: "("
+PAREN_DER: ")"
+LLAVE_IZQ: "{"
+LLAVE_DER: "}"
+CORCHETE_IZQ: "["
+CORCHETE_DER: "]"
 
 // - SINTAXIS -
 
-start: program
+start: programa
 
-// Programa completo
-program: PROGRAM ID SEMICOL vars_section? funcs_section MAIN body END
+programa: PROGRAMA ID PUNTO_COMA vars_seccion? funcs_seccion* cuerpo_principal
 
-// Tipos básicos (para variables y funciones con tipo)
-type: INT | FLOAT
+cuerpo_principal: INICIO LLAVE_IZQ estatutos LLAVE_DER FIN
 
-// Sección de variables globales o locales
-vars_section: VARS COLON decvar+
-decvar: id_list COLON type SEMICOL
-id_list: ID (COMMA ID)*
+tipo: ENTERO | FLOTANTE
 
-// - FUNCIONES -
 
-// Regla para el tipo de retorno de la función:
-// puede ser VOID (función sin valor) o un tipo numérico (INT/FLOAT)
-func_return_type: VOID | type
+// SECCIÓN DE VARIABLES
 
-// Declaración de función:
-funcs_section: func_decl*
-func_decl: func_return_type ID LPAREN params? RPAREN LBRACKET vars_section? body RBRACKET SEMICOL
+vars_seccion: VARS DOS_PUNTOS declaracion_var+
 
-// Parámetros formales
-params: param (COMMA param)*
-param: ID COLON type
+declaracion_var: lista_ids DOS_PUNTOS tipo PUNTO_COMA
 
-// - BODY Y ESTATUTOS -
+lista_ids: ID (COMA ID)*
 
-body: LBRACE stmt_list RBRACE
-stmt_list: statement*
+// SECCIÓN DE FUNCIONES
 
-// return_stmt como un estatuto más
-statement: assign | condition | cycle | fcall | print_stmt | return_stmt | body
+funcs_seccion: func_decl*
 
-// Asignación:  id = expresión ;
-assign: ID ASSIGN expression SEMICOL
+func_decl: tipo_retorno ID PAREN_IZQ params? PAREN_DER LLAVE_IZQ vars_seccion? estatutos LLAVE_DER PUNTO_COMA
 
-// if (expresión) { ... } [else { ... }] ;
-condition: IF LPAREN expression RPAREN body (ELSE body)? SEMICOL
+tipo_retorno: NULA | tipo
 
-// while (expresión) do { ... } ;
-cycle: WHILE LPAREN expression RPAREN DO body SEMICOL
+params: param (COMA param)*
+param: ID DOS_PUNTOS tipo
 
-// Llamada a función como estatuto: foo(a, b);
-fcall: ID LPAREN args RPAREN SEMICOL
-args: expression (COMMA expression)*
+// CUERPO Y ESTATUTOS
 
-// NUEVO: return [expresión] ;
-// - En funciones VOID se usará "return;"
-// - En funciones con tipo se usará "return expresión;"
-return_stmt: RETURN expression? SEMICOL
+estatutos: estatuto*
 
-// Print
-print_stmt: PRINT LPAREN print_args RPAREN SEMICOL
-print_args: CTE_STRING | expression (COMMA CTE_STRING)?
+estatuto: asignacion | condicion | ciclo | llamada_func | imprime | retorno | bloque_anidado
 
-// - EXPRESIONES -
+bloque_anidado: CORCHETE_IZQ estatutos CORCHETE_DER
 
-expression: simple_expr rel_tail?
-rel_tail: (GREATER | LESS | NOTEQUAL | EQUAL) simple_expr
+// ASIGNACIÓN
 
-simple_expr: term ((PLUS | MINUS) term)*
-term: factor ((STAR | SLASH) factor)*
+asignacion: ID ASIGNA expresion PUNTO_COMA
 
-factor: LPAREN expression RPAREN | sign_opt primary
-sign_opt: (PLUS | MINUS)?
+// IMPRIME (ESCRIBE)
 
-// primary incluye id, constantes y llamada a función como expresión
-primary: ID call_suffix? | number
+imprime: ESCRIBE PAREN_IZQ args_imprime PAREN_DER PUNTO_COMA
 
-// Si no aparece, el ID se trata como variable
-call_suffix: LPAREN args RPAREN
+args_imprime: (expresion (COMA expresion)*) | (CTE_STRING (COMA expresion)?)
 
-number: CTE_INT | CTE_FLOAT
+// CONDICIONAL
+
+condicion: SI PAREN_IZQ expresion PAREN_DER cuerpo (SINO cuerpo)? PUNTO_COMA
+
+cuerpo: LLAVE_IZQ estatutos LLAVE_DER
+
+// CICLO
+
+ciclo: MIENTRAS PAREN_IZQ expresion PAREN_DER HAZ cuerpo PUNTO_COMA
+
+// LLAMADA A FUNCIÓN
+
+llamada_func: ID PAREN_IZQ args? PAREN_DER PUNTO_COMA
+
+args: expresion (COMA expresion)*
+
+// RETURN
+
+retorno: RETURN expresion? PUNTO_COMA
+
+// EXPRESIONES
+
+expresion: exp_simple cola_relacional?
+
+cola_relacional: (MAYOR | MENOR | DIFERENTE | IGUAL) exp_simple
+
+exp_simple: termino ((MAS | MENOS) termino)*
+
+termino: factor ((POR | ENTRE) factor)*
+
+factor: signo? primario
+
+signo: MAS | MENOS
+
+primario: PAREN_IZQ expresion PAREN_DER | constante | ID sufijo_llamada?
+
+sufijo_llamada: PAREN_IZQ args? PAREN_DER
+
+constante: CTE_INT | CTE_FLOAT
