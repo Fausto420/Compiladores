@@ -4,77 +4,67 @@ from builder import build_symbol_tables
 from semantics import SemanticError
 
 DEMO = """
-program demo;
+programa demo;
 vars:
-    x, y, result: int;
-    pi, area: float;
+    x, y, result: entero;
+    pi, area: flotante;
 
-int square(n: int) [
-    {
-        return n * n;
-    }
-];
+entero square(n: entero) {
+    return n * n;
+};
 
-int abs(value: int) [
-    {
-        if (value < 0) {
-            return -value;
-        } else {
-            return value;
-        };
-    }
-];
+entero abs(value: entero) {
+    si (value < 0) {
+        return -value;
+    } sino {
+        return value;
+    };
+};
 
-float circleArea(radius: float) [
-    {
-        return radius * radius;
-    }
-];
+flotante circleArea(radius: flotante) {
+    return radius * radius;
+};
 
-int max(a: int, b: int) [
-    {
-        if (a > b) {
-            return a;
-        } else {
-            return b;
-        };
-    }
-];
+entero max(a: entero, b: entero) {
+    si (a > b) {
+        return a;
+    } sino {
+        return b;
+    };
+};
 
-void printMessage(code: int) [
-    {
-        if (code == 0) {
-            print("Success");
-            return;
-        };
-        print("Error");
-    }
-];
+nula printMessage(code: entero) {
+    si (code == 0) {
+        escribe("Success");
+        return;
+    };
+    escribe("Error");
+};
 
-main {
+inicio {
     x = 5;
     y = -3;
 
     result = square(x);
-    print(result, "square of 5");
+    escribe(result);
 
     result = abs(y);
-    print(result, "absolute value");
+    escribe(result);
 
     result = max(x, y);
-    print(result, "maximum");
+    escribe(result);
 
     pi = 3.14;
     area = circleArea(pi);
-    print(area, "area");
+    escribe(area);
 
     result = square(x) + abs(y);
-    print(result, "combined expression");
+    escribe(result);
 
     printMessage(0);
     printMessage(1);
 }
-end
+fin
 """
 
 def main():

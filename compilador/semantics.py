@@ -33,6 +33,7 @@ class InvalidTypeError(SemanticError):
 
 # CUBO SEMÁNTICO
 OPERATOR_ALIASES: Dict[str, str] = {
+    # Símbolos de operadores
     "+": "PLUS",
     "-": "MINUS",
     "*": "STAR",
@@ -41,6 +42,15 @@ OPERATOR_ALIASES: Dict[str, str] = {
     "<": "LESS",
     "!=": "NOTEQUAL",
     "==": "EQUAL",
+    # Token types
+    "MAS": "PLUS",
+    "MENOS": "MINUS",
+    "POR": "STAR",
+    "ENTRE": "SLASH",
+    "MAYOR": "GREATER",
+    "MENOR": "LESS",
+    "DIFERENTE": "NOTEQUAL",
+    "IGUAL": "EQUAL",
 }
 
 SEMANTIC_CUBE: Dict[str, Dict[tuple, TypeName]] = {

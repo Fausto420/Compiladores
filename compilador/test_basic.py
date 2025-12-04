@@ -2,77 +2,67 @@ from lark.exceptions import UnexpectedInput
 from parse_and_scan import parse, scan
 
 DEMO = """
-program demo;
+programa demo;
 vars:
-    x, y, result: int;
-    pi, area: float;
+    x, y, result: entero;
+    pi, area: flotante;
 
-int square(n: int) [
-    {
-        return n * n;
-    }
-];
+entero square(n: entero) {
+    return n * n;
+};
 
-int abs(value: int) [
-    {
-        if (value < 0) {
-            return -value;
-        } else {
-            return value;
-        };
-    }
-];
+entero abs(value: entero) {
+    si (value < 0) {
+        return -value;
+    } sino {
+        return value;
+    };
+};
 
-float circleArea(radius: float) [
-    {
-        return radius * radius;
-    }
-];
+flotante circleArea(radius: flotante) {
+    return radius * radius;
+};
 
-int max(a: int, b: int) [
-    {
-        if (a > b) {
-            return a;
-        } else {
-            return b;
-        };
-    }
-];
+entero max(a: entero, b: entero) {
+    si (a > b) {
+        return a;
+    } sino {
+        return b;
+    };
+};
 
-void printMessage(code: int) [
-    {
-        if (code == 0) {
-            print("Success");
-            return;
-        };
-        print("Error");
-    }
-];
+nula printMessage(code: entero) {
+    si (code == 0) {
+        escribe("Success");
+        return;
+    };
+    escribe("Error");
+};
 
-main {
+inicio {
     x = 5;
     y = -3;
 
     result = square(x);
-    print(result, "square of 5");
+    escribe(result);
 
     result = abs(y);
-    print(result, "absolute value");
+    escribe(result);
 
     result = max(x, y);
-    print(result, "maximum");
+    escribe(result);
 
     pi = 3.14;
     area = circleArea(pi);
-    print(area, "area");
+    escribe(area);
 
     result = square(x) + abs(y);
-    print(result, "combined expression");
+    escribe(result);
 
     printMessage(0);
     printMessage(1);
 }
-end
+fin
 """
 
 def test_demo_parses():
@@ -80,12 +70,12 @@ def test_demo_parses():
     assert tree is not None
 
 def test_keywords_not_ids():
-    kw = "program main end vars void int float if else while do print"
+    kw = "programa inicio fin vars nula entero flotante si sino mientras haz escribe"
     types = [t[0] for t in scan(kw)]
     assert "ID" not in types
 
 def test_missing_semicolon():
-    bad = "program p; vars: x: int; main { x = 1 } end"
+    bad = "programa p; vars: x: entero; inicio { x = 1 } fin"
     try:
         parse(bad)
         assert False, "Debió fallar por ; faltante"
@@ -93,6 +83,6 @@ def test_missing_semicolon():
         assert True
 
 def test_precedence_mult_before_plus():
-    tree = parse("program p; vars: x: int; main { x = 1 + 2 * 3; } end")
+    tree = parse("programa p; vars: x: entero; inicio { x = 1 + 2 * 3; } fin")
     s = tree.pretty()
-    assert "simple_expr" in s and "term" in s
+    assert "exp_simple" in s and "termino" in s

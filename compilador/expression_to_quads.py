@@ -118,37 +118,41 @@ class ExpressionQuadrupleGenerator:
     # Entradas de alto nivel
     def generate_program(self, program_tree: Tree) -> IntermediateCodeContext:
         """
-        Entra al nodo 'program' y genera cuádruplos para todas las funciones de funcs_section y
-        el body principal (después de MAIN).
+        Entra al nodo 'start' o 'programa' y genera cuádruplos para todas las funciones de funcs_seccion y
+        el cuerpo principal (después de INICIO).
         """
-        if not isinstance(program_tree, Tree) or program_tree.data != "program":
-            raise ValueError("generate_program espera un Tree('program').")
+        # Si es el nodo start, extrae el programa
+        if isinstance(program_tree, Tree) and program_tree.data == "start":
+            program_tree = program_tree.children[0]
+
+        if not isinstance(program_tree, Tree) or program_tree.data != "programa":
+            raise ValueError("generate_program espera un Tree('start') o Tree('programa').")
 
         # 1) Funciones
         for child in program_tree.children:
-            if isinstance(child, Tree) and child.data == "funcs_section":
-                self._generate_funcs_section(child)
+            if isinstance(child, Tree) and child.data == "funcs_seccion":
+                self._generate_funcs_seccion(child)
 
-        # 2) Body principal (MAIN body)
+        # 2) Cuerpo principal (INICIO estatutos FIN)
         for child in program_tree.children:
-            if isinstance(child, Tree) and child.data == "body":
+            if isinstance(child, Tree) and child.data == "cuerpo_principal":
                 self.current_function_name = None
-                self._generate_body(child)
+                self._generate_cuerpo_principal(child)
 
         return self.context
 
-    def _generate_funcs_section(self, funcs_section_tree: Tree) -> None:
-        """funcs_section: func_decl*"""
-        for child in funcs_section_tree.children:
+    def _generate_funcs_seccion(self, funcs_seccion_tree: Tree) -> None:
+        """funcs_seccion: func_decl*"""
+        for child in funcs_seccion_tree.children:
             if isinstance(child, Tree) and child.data == "func_decl":
                 self._generate_function(child)
 
     def _generate_function(self, func_decl_tree: Tree) -> None:
         """
-        func_decl: func_return_type ID LPAREN params RPAREN LBRACKET vars_section body RBRACKET SEMICOL
+        func_decl: tipo_retorno ID PAREN_IZQ params? PAREN_DER LLAVE_IZQ vars_seccion? estatutos LLAVE_DER PUNTO_COMA
         """
         function_name: Optional[str] = None
-        body_tree: Optional[Tree] = None
+        estatutos_tree: Optional[Tree] = None
 
         # Busca el nombre (ID)
         for child in func_decl_tree.children:
@@ -159,14 +163,14 @@ class ExpressionQuadrupleGenerator:
         if function_name is None:
             raise ValueError("func_decl sin ID de función.")
 
-        # Busca el body
+        # Busca el nodo estatutos
         for child in func_decl_tree.children:
-            if isinstance(child, Tree) and child.data == "body":
-                body_tree = child
+            if isinstance(child, Tree) and child.data == "estatutos":
+                estatutos_tree = child
                 break
 
-        if body_tree is None:
-            raise ValueError(f"func_decl de '{function_name}' sin body.")
+        if estatutos_tree is None:
+            raise ValueError(f"func_decl de '{function_name}' sin estatutos.")
 
         previous_function_name = self.current_function_name
         self.current_function_name = function_name
@@ -191,7 +195,7 @@ class ExpressionQuadrupleGenerator:
         # Ya no quedan pendientes para esta función
         self.pending_gosub_fixups[function_name] = []
 
-        self._generate_body(body_tree)
+        self._generate_estatutos(estatutos_tree)
 
         end_index = self.context.quadruples.enqueue(
             Quadruple("ENDFUNC", function_name, None, None)
@@ -203,52 +207,64 @@ class ExpressionQuadrupleGenerator:
 
         self.current_function_name = previous_function_name
 
-    # BODY y statements
-    def _generate_body(self, body_tree: Tree) -> None:
-        """body: LBRACE stmt_list RBRACE"""
-        for child in body_tree.children:
-            if isinstance(child, Tree) and child.data == "stmt_list":
-                self._generate_stmt_list(child)
+    # Cuerpo principal y estatutos
+    def _generate_cuerpo_principal(self, cuerpo_principal_tree: Tree) -> None:
+        """cuerpo_principal: INICIO LLAVE_IZQ estatutos LLAVE_DER FIN"""
+        for child in cuerpo_principal_tree.children:
+            if isinstance(child, Tree) and child.data == "estatutos":
+                self._generate_estatutos(child)
 
-    def _generate_stmt_list(self, stmt_list_tree: Tree) -> None:
-        """stmt_list: statement*"""
-        for child in stmt_list_tree.children:
-            if isinstance(child, Tree) and child.data == "statement":
-                self._generate_statement(child)
+    def _generate_cuerpo(self, cuerpo_tree: Tree) -> None:
+        """cuerpo: LLAVE_IZQ estatutos LLAVE_DER"""
+        for child in cuerpo_tree.children:
+            if isinstance(child, Tree) and child.data == "estatutos":
+                self._generate_estatutos(child)
 
-    def _generate_statement(self, statement_tree: Tree) -> None:
+    def _generate_estatutos(self, estatutos_tree: Tree) -> None:
+        """estatutos: estatuto*"""
+        for child in estatutos_tree.children:
+            if isinstance(child, Tree) and child.data == "estatuto":
+                self._generate_estatuto(child)
+
+    def _generate_estatuto(self, estatuto_tree: Tree) -> None:
         """
-        statement: assign | condition | cycle | fcall | print_stmt | return_stmt | body
+        estatuto: asignacion | condicion | ciclo | llamada_func | imprime | retorno | bloque_anidado
         """
-        for child in statement_tree.children:
+        for child in estatuto_tree.children:
             if not isinstance(child, Tree):
                 continue
 
-            if child.data == "assign":
-                self._generate_assign(child)
-            elif child.data == "condition":
-                self._generate_condition(child)
-            elif child.data == "cycle":
-                self._generate_cycle(child)
-            elif child.data == "fcall":
-                self._generate_fcall(child)
-            elif child.data == "print_stmt":
-                self._generate_print_stmt(child)
-            elif child.data == "return_stmt":
-                self._generate_return_stmt(child)
-            elif child.data == "body":
-                self._generate_body(child)
+            if child.data == "asignacion":
+                self._generate_asignacion(child)
+            elif child.data == "condicion":
+                self._generate_condicion(child)
+            elif child.data == "ciclo":
+                self._generate_ciclo(child)
+            elif child.data == "llamada_func":
+                self._generate_llamada_func(child)
+            elif child.data == "imprime":
+                self._generate_imprime(child)
+            elif child.data == "retorno":
+                self._generate_retorno(child)
+            elif child.data == "bloque_anidado":
+                self._generate_bloque_anidado(child)
 
-    def _generate_assign(self, assign_tree: Tree) -> None:
+    def _generate_bloque_anidado(self, bloque_anidado_tree: Tree) -> None:
+        """bloque_anidado: CORCHETE_IZQ estatutos CORCHETE_DER"""
+        for child in bloque_anidado_tree.children:
+            if isinstance(child, Tree) and child.data == "estatutos":
+                self._generate_estatutos(child)
+
+    def _generate_asignacion(self, asignacion_tree: Tree) -> None:
         """
-        assign: ID ASSIGN expression SEMICOL
+        asignacion: ID ASIGNA expresion PUNTO_COMA
         """
-        children = assign_tree.children
+        children = asignacion_tree.children
 
         # 1) Variable destino (ID)
         variable_token = children[0]
         if not isinstance(variable_token, Token) or variable_token.type != "ID":
-            raise ValueError("Primer hijo de 'assign' debe ser ID.")
+            raise ValueError("Primer hijo de 'asignacion' debe ser ID.")
         variable_name = variable_token.value
 
         variable_info = self.function_directory.lookup_variable(
@@ -258,21 +274,21 @@ class ExpressionQuadrupleGenerator:
         left_type: TypeName = variable_info.var_type
 
         # 2) Busca la expresión del lado derecho
-        expression_tree: Optional[Tree] = None
+        expresion_tree: Optional[Tree] = None
         for child in children:
-            if isinstance(child, Tree) and child.data == "expression":
-                expression_tree = child
+            if isinstance(child, Tree) and child.data == "expresion":
+                expresion_tree = child
                 break
 
-        if expression_tree is None:
-            raise ValueError("assign sin expresión del lado derecho.")
+        if expresion_tree is None:
+            raise ValueError("asignacion sin expresión del lado derecho.")
 
         # 3) Genera cuádruplos para la expresión
-        expression_result = self._generate_expression(expression_tree)
-        right_type: TypeName = expression_result.result_type
+        expresion_result = self._generate_expresion(expresion_tree)
+        right_type: TypeName = expresion_result.result_type
 
         # 4) Validación de tipos
-        assert_assign(left_type, right_type, context="assign")
+        assert_assign(left_type, right_type, context="asignacion")
 
         # 5) Cuádruplo ASSIGN usando direcciones virtuales
         if variable_info.virtual_address is None:
@@ -283,31 +299,31 @@ class ExpressionQuadrupleGenerator:
         self.context.quadruples.enqueue(
             Quadruple(
                 "ASSIGN",
-                expression_result.address, # dirección del valor calculado
+                expresion_result.address, # dirección del valor calculado
                 None,
                 variable_info.virtual_address, # dirección de la variable destino
             )
         )
 
-    def _generate_print_stmt(self, print_stmt_tree: Tree) -> None:
+    def _generate_imprime(self, imprime_tree: Tree) -> None:
         """
-        print_stmt: PRINT LPAREN print_args RPAREN SEMICOL
-        print_args: CTE_STRING | expression (COMMA CTE_STRING)?
+        imprime: ESCRIBE PAREN_IZQ args_imprime PAREN_DER PUNTO_COMA
+        args_imprime: (expresion (COMA expresion)*) | (CTE_STRING (COMA expresion)?)
         """
-        print_args_tree: Optional[Tree] = None
+        args_imprime_tree: Optional[Tree] = None
 
-        # Localiza el nodo print_args
-        for child in print_stmt_tree.children:
-            if isinstance(child, Tree) and child.data == "print_args":
-                print_args_tree = child
+        # Localiza el nodo args_imprime
+        for child in imprime_tree.children:
+            if isinstance(child, Tree) and child.data == "args_imprime":
+                args_imprime_tree = child
                 break
 
-        if print_args_tree is None:
-            raise ValueError("print_stmt sin print_args.")
+        if args_imprime_tree is None:
+            raise ValueError("imprime sin args_imprime.")
 
-        children = print_args_tree.children
+        children = args_imprime_tree.children
 
-        # Caso 1: print("texto")
+        # Caso 1: escribe("texto") - solo string
         if (
             len(children) == 1
             and isinstance(children[0], Token)
@@ -324,24 +340,17 @@ class ExpressionQuadrupleGenerator:
             )
             return
 
-        # Caso 2: print(expr) o print(expr, "texto")
-        expression_tree = children[0]
-        if not isinstance(expression_tree, Tree) or expression_tree.data != "expression":
-            raise ValueError(
-                "print_args mal formado: se esperaba expression o CTE_STRING."
-            )
-
-        expr_result = self._generate_expression(expression_tree)
-        self.context.quadruples.enqueue(
-            Quadruple("PRINT", expr_result.address, None, None)
-        )
-
-        # Si hay coma y string, lo imprime después
-        if len(children) >= 3:
-            last = children[-1]
-            if isinstance(last, Token) and last.type == "CTE_STRING":
+        # Caso 2: escribe(expr) o escribe(expr, expr, ...)
+        # Procesa cada hijo que sea una expresión
+        for child in children:
+            if isinstance(child, Tree) and child.data == "expresion":
+                expr_result = self._generate_expresion(child)
+                self.context.quadruples.enqueue(
+                    Quadruple("PRINT", expr_result.address, None, None)
+                )
+            elif isinstance(child, Token) and child.type == "CTE_STRING":
                 string_address = self.virtual_memory.allocate_constant(
-                    last.value,
+                    child.value,
                     "STRING",
                 )
                 self.context.quadruples.enqueue(
@@ -414,22 +423,22 @@ class ExpressionQuadrupleGenerator:
         if start_index is None:
             self.pending_gosub_fixups.setdefault(function_name, []).append(gosub_index)
 
-    def _generate_fcall(self, fcall_tree: Tree) -> None:
+    def _generate_llamada_func(self, llamada_func_tree: Tree) -> None:
         """
-        fcall: ID LPAREN args RPAREN SEMICOL
+        llamada_func: ID PAREN_IZQ args? PAREN_DER PUNTO_COMA
         """
         function_name: Optional[str] = None
         args_tree: Optional[Tree] = None
 
         # Extrae el nombre de la función y el nodo args
-        for child in fcall_tree.children:
+        for child in llamada_func_tree.children:
             if isinstance(child, Token) and child.type == "ID":
                 function_name = child.value
             elif isinstance(child, Tree) and child.data == "args":
                 args_tree = child
 
         if function_name is None:
-            raise ValueError("fcall sin nombre de función.")
+            raise ValueError("llamada_func sin nombre de función.")
 
         # Prepara y valida la llamada
         function_info, argument_results = self._prepare_function_call(function_name, args_tree)
@@ -439,23 +448,23 @@ class ExpressionQuadrupleGenerator:
 
     def _generate_args(self, args_tree: Tree) -> List[ExpressionResult]:
         """
-        args: expression (COMMA expression)*
+        args: expresion (COMA expresion)*
         """
         children = args_tree.children
         results: List[ExpressionResult] = []
 
-        # Patrón: expr, COMMA, expr, COMMA, ...
+        # Patrón: expr, COMA, expr, COMA, ...
         for index in range(0, len(children), 2):
             expr_node = children[index]
-            if not isinstance(expr_node, Tree) or expr_node.data != "expression":
-                raise ValueError("Se esperaba Tree('expression') en args.")
-            results.append(self._generate_expression(expr_node))
+            if not isinstance(expr_node, Tree) or expr_node.data != "expresion":
+                raise ValueError("Se esperaba Tree('expresion') en args.")
+            results.append(self._generate_expresion(expr_node))
 
         return results
 
-    def _generate_return_stmt(self, return_tree: Tree) -> None:
+    def _generate_retorno(self, retorno_tree: Tree) -> None:
         """
-        return_stmt: RETURN expression? SEMICOL
+        retorno: RETURN expresion? PUNTO_COMA
 
         Genera el código para un 'return' dentro de una función:
         - Valida el tipo usando assert_return.
@@ -467,18 +476,18 @@ class ExpressionQuadrupleGenerator:
             raise SemanticError("El estatuto 'return' solo puede usarse dentro de una función.")
 
         # Localiza en caso de existir la expresión del return
-        expression_tree: Optional[Tree] = None
-        for child in return_tree.children:
-            if isinstance(child, Tree) and child.data == "expression":
-                expression_tree = child
+        expresion_tree: Optional[Tree] = None
+        for child in retorno_tree.children:
+            if isinstance(child, Tree) and child.data == "expresion":
+                expresion_tree = child
                 break
 
-        expression_result: Optional[ExpressionResult] = None
+        expresion_result: Optional[ExpressionResult] = None
         expr_type: Optional[TypeName]
 
-        if expression_tree is not None:
-            expression_result = self._generate_expression(expression_tree)
-            expr_type = expression_result.result_type
+        if expresion_tree is not None:
+            expresion_result = self._generate_expresion(expresion_tree)
+            expr_type = expresion_result.result_type
         else:
             expr_type = None
 
@@ -494,7 +503,7 @@ class ExpressionQuadrupleGenerator:
 
         # Si la función tiene tipo (INT/FLOAT), debe copiar el valor al slot de retorno
         if function_info.return_type != VOID:
-            if expression_result is None:
+            if expresion_result is None:
                 # Esto no debería pasar porque assert_return ya habría tronado antes,
                 # pero dejamos el check por claridad.
                 raise SemanticError(
@@ -508,7 +517,7 @@ class ExpressionQuadrupleGenerator:
             self.context.quadruples.enqueue(
                 Quadruple(
                     "ASSIGN",
-                    expression_result.address,
+                    expresion_result.address,
                     None,
                     ret_address,
                 )
@@ -520,99 +529,99 @@ class ExpressionQuadrupleGenerator:
         )
         self.pending_return_gotos.setdefault(self.current_function_name, []).append(goto_index)
 
-    # Estatutos no lineales: if / else y while
-    def _generate_condition(self, condition_tree: Tree) -> None:
+    # Estatutos no lineales: si / sino y mientras
+    def _generate_condicion(self, condicion_tree: Tree) -> None:
         """
-        condition: IF LPAREN expression RPAREN body (ELSE body)? SEMICOL
+        condicion: SI PAREN_IZQ expresion PAREN_DER cuerpo (SINO cuerpo)? PUNTO_COMA
         """
-        children = condition_tree.children
+        children = condicion_tree.children
 
-        # Localiza expression y los body
-        expression_tree: Optional[Tree] = None
-        body_nodes: List[Tree] = []
+        # Localiza expresion y los cuerpo
+        expresion_tree: Optional[Tree] = None
+        cuerpo_nodes: List[Tree] = []
 
         for child in children:
             if isinstance(child, Tree):
-                if child.data == "expression":
-                    expression_tree = child
-                elif child.data == "body":
-                    body_nodes.append(child)
+                if child.data == "expresion":
+                    expresion_tree = child
+                elif child.data == "cuerpo":
+                    cuerpo_nodes.append(child)
 
-        if expression_tree is None or not body_nodes:
-            raise ValueError("condition mal formada (falta expresión o body).")
+        if expresion_tree is None or not cuerpo_nodes:
+            raise ValueError("condicion mal formada (falta expresión o cuerpo).")
 
-        then_body_tree = body_nodes[0]
-        else_body_tree = body_nodes[1] if len(body_nodes) > 1 else None
+        then_cuerpo_tree = cuerpo_nodes[0]
+        else_cuerpo_tree = cuerpo_nodes[1] if len(cuerpo_nodes) > 1 else None
 
         # Genera código para la condición
-        condition_result = self._generate_expression(expression_tree)
-        ensure_bool(condition_result.result_type, context="if condition")
+        condicion_result = self._generate_expresion(expresion_tree)
+        ensure_bool(condicion_result.result_type, context="si condicion")
 
         # GOTOF cond, -, destino (se rellena después)
         gotof_index = len(self.context.quadruples)
         self.context.quadruples.enqueue(
-            Quadruple("GOTOF", condition_result.address, None, None)
+            Quadruple("GOTOF", condicion_result.address, None, None)
         )
 
         # THEN
-        self._generate_body(then_body_tree)
+        self._generate_cuerpo(then_cuerpo_tree)
 
-        if else_body_tree is not None:
-            # GOTO para saltar el else al final del if
+        if else_cuerpo_tree is not None:
+            # GOTO para saltar el sino al final del si
             goto_end_index = len(self.context.quadruples)
             self.context.quadruples.enqueue(
                 Quadruple("GOTO", None, None, None)
             )
 
-            # Rellena el GOTOF para que apunte al inicio del else
+            # Rellena el GOTOF para que apunte al inicio del sino
             else_start_index = len(self.context.quadruples)
             self.context.quadruples.update_result(gotof_index, else_start_index)
 
             # ELSE
-            self._generate_body(else_body_tree)
+            self._generate_cuerpo(else_cuerpo_tree)
 
-            # Rellena el GOTO de salida del if/else
+            # Rellena el GOTO de salida del si/sino
             end_index = len(self.context.quadruples)
             self.context.quadruples.update_result(goto_end_index, end_index)
         else:
-            # No hay else: GOTOF salta directo al final
+            # No hay sino: GOTOF salta directo al final
             end_index = len(self.context.quadruples)
             self.context.quadruples.update_result(gotof_index, end_index)
 
-    def _generate_cycle(self, cycle_tree: Tree) -> None:
+    def _generate_ciclo(self, ciclo_tree: Tree) -> None:
         """
-        cycle: WHILE LPAREN expression RPAREN DO body SEMICOL
+        ciclo: MIENTRAS PAREN_IZQ expresion PAREN_DER HAZ cuerpo PUNTO_COMA
         """
-        children = cycle_tree.children
+        children = ciclo_tree.children
 
         # Inicio del ciclo
         loop_start_index = len(self.context.quadruples)
 
-        # Busca expresión y body
-        expression_tree: Optional[Tree] = None
-        body_tree: Optional[Tree] = None
+        # Busca expresión y cuerpo
+        expresion_tree: Optional[Tree] = None
+        cuerpo_tree: Optional[Tree] = None
 
         for child in children:
             if isinstance(child, Tree):
-                if child.data == "expression":
-                    expression_tree = child
-                elif child.data == "body":
-                    body_tree = child
+                if child.data == "expresion":
+                    expresion_tree = child
+                elif child.data == "cuerpo":
+                    cuerpo_tree = child
 
-        if expression_tree is None or body_tree is None:
-            raise ValueError("cycle mal formado (falta expresión o body).")
+        if expresion_tree is None or cuerpo_tree is None:
+            raise ValueError("ciclo mal formado (falta expresión o cuerpo).")
 
-        condition_result = self._generate_expression(expression_tree)
-        ensure_bool(condition_result.result_type, context="while condition")
+        condicion_result = self._generate_expresion(expresion_tree)
+        ensure_bool(condicion_result.result_type, context="mientras condicion")
 
         # GOTOF cond, -, destino_salida (se rellena después)
         gotof_index = len(self.context.quadruples)
         self.context.quadruples.enqueue(
-            Quadruple("GOTOF", condition_result.address, None, None)
+            Quadruple("GOTOF", condicion_result.address, None, None)
         )
 
-        # Body del ciclo
-        self._generate_body(body_tree)
+        # Cuerpo del ciclo
+        self._generate_cuerpo(cuerpo_tree)
 
         # GOTO de vuelta al inicio
         self.context.quadruples.enqueue(
@@ -623,32 +632,32 @@ class ExpressionQuadrupleGenerator:
         end_index = len(self.context.quadruples)
         self.context.quadruples.update_result(gotof_index, end_index)
 
-    def _generate_expression(self, expression_tree: Tree) -> ExpressionResult:
+    def _generate_expresion(self, expresion_tree: Tree) -> ExpressionResult:
         """
-        expression: simple_expr rel_tail?
-        rel_tail: (GREATER | LESS | NOTEQUAL | EQUAL) simple_expr | ε
+        expresion: exp_simple cola_relacional?
+        cola_relacional: (MAYOR | MENOR | DIFERENTE | IGUAL) exp_simple
         """
-        children = expression_tree.children
+        children = expresion_tree.children
 
-        simple_expr_tree = children[0]
-        left_result = self._generate_simple_expr(simple_expr_tree)
+        exp_simple_tree = children[0]
+        left_result = self._generate_exp_simple(exp_simple_tree)
 
-        # Sin rel_tail: sólo expresión aritmética
+        # Sin cola_relacional: sólo expresión aritmética
         if len(children) == 1:
             return left_result
 
         # Hay comparación relacional
-        rel_tail_tree = children[1]
+        cola_relacional_tree = children[1]
 
-        # En la gramática actual rel_tail siempre puede existir pero estar vacío.
-        if not isinstance(rel_tail_tree, Tree) or not rel_tail_tree.children:
+        # En la gramática actual cola_relacional siempre puede existir pero estar vacío.
+        if not isinstance(cola_relacional_tree, Tree) or not cola_relacional_tree.children:
             return left_result
 
-        operator_token = rel_tail_tree.children[0]
-        right_simple_expr_tree = rel_tail_tree.children[1]
+        operator_token = cola_relacional_tree.children[0]
+        right_exp_simple_tree = cola_relacional_tree.children[1]
 
-        operator_name = operator_token.type  # GREATER, LESS, NOTEQUAL, EQUAL
-        right_result = self._generate_simple_expr(right_simple_expr_tree)
+        operator_name = operator_token.type  # MAYOR, MENOR, DIFERENTE, IGUAL
+        right_result = self._generate_exp_simple(right_exp_simple_tree)
 
         # Usamos las pilas para generar el cuádruplo relacional
         comparison_result = self._emit_binary_operation(
@@ -658,26 +667,26 @@ class ExpressionQuadrupleGenerator:
         )
 
         # La comparación debe ser booleana
-        ensure_bool(comparison_result.result_type, context="relational expression")
+        ensure_bool(comparison_result.result_type, context="expresion relacional")
 
         return comparison_result
     
-    def _generate_simple_expr(self, simple_expr_tree: Tree) -> ExpressionResult:
+    def _generate_exp_simple(self, exp_simple_tree: Tree) -> ExpressionResult:
         """
-        simple_expr: term ((PLUS | MINUS) term)*
+        exp_simple: termino ((MAS | MENOS) termino)*
         """
-        children = simple_expr_tree.children
+        children = exp_simple_tree.children
 
         # Primer término
-        current_result = self._generate_term(children[0])
+        current_result = self._generate_termino(children[0])
 
         index = 1
         while index < len(children):
             operator_token = children[index]
-            right_term_tree = children[index + 1]
+            right_termino_tree = children[index + 1]
 
-            operator_name = operator_token.type  # PLUS o MINUS
-            right_result = self._generate_term(right_term_tree)
+            operator_name = operator_token.type  # MAS o MENOS
+            right_result = self._generate_termino(right_termino_tree)
 
             # Genera el cuádruplo utilizando las pilas
             current_result = self._emit_binary_operation(
@@ -690,11 +699,11 @@ class ExpressionQuadrupleGenerator:
 
         return current_result
 
-    def _generate_term(self, term_tree: Tree) -> ExpressionResult:
+    def _generate_termino(self, termino_tree: Tree) -> ExpressionResult:
         """
-        term: factor ((STAR | SLASH) factor)*
+        termino: factor ((POR | ENTRE) factor)*
         """
-        children = term_tree.children
+        children = termino_tree.children
 
         current_result = self._generate_factor(children[0])
 
@@ -703,7 +712,7 @@ class ExpressionQuadrupleGenerator:
             operator_token = children[index]
             right_factor_tree = children[index + 1]
 
-            operator_name = operator_token.type  # STAR o SLASH
+            operator_name = operator_token.type  # POR o ENTRE
             right_result = self._generate_factor(right_factor_tree)
 
             # Genera el cuádruplo utilizando las pilas
@@ -752,74 +761,93 @@ class ExpressionQuadrupleGenerator:
 
     def _generate_factor(self, factor_tree: Tree) -> ExpressionResult:
         """
-        factor: LPAREN expression RPAREN | sign_opt primary
+        factor: signo? primario
         """
         children = factor_tree.children
 
-        # Caso paréntesis: ( expression )
-        if (
-            len(children) == 3
-            and isinstance(children[0], Token) and children[0].type == "LPAREN"
-            and isinstance(children[2], Token) and children[2].type == "RPAREN"
-        ):
-            expression_tree = children[1]
-            return self._generate_expression(expression_tree)
+        # Caso sin signo: solo primario
+        if len(children) == 1:
+            primario_tree = children[0]
+            # Verificar si es directamente un primario o una expresión entre paréntesis
+            if isinstance(primario_tree, Tree):
+                if primario_tree.data == "primario":
+                    return self._generate_primario(primario_tree)
+                elif primario_tree.data == "expresion":
+                    # Caso paréntesis: PAREN_IZQ expresion PAREN_DER
+                    return self._generate_expresion(primario_tree)
+            raise ValueError(f"Forma inesperada de factor (1 hijo): {children!r}")
 
-        # Caso sign_opt primary
+        # Caso con signo: signo primario
         if len(children) == 2:
-            sign_opt_tree = children[0]
-            primary_tree = children[1]
+            signo_tree = children[0]
+            primario_tree = children[1]
 
-            primary_result = self._generate_primary(primary_tree)
+            primario_result = self._generate_primario(primario_tree)
 
-            # sign_opt puede venir vacío
+            # Extrae el token del signo
             sign_token: Optional[Token] = (
-                sign_opt_tree.children[0] if sign_opt_tree.children else None
+                signo_tree.children[0] if isinstance(signo_tree, Tree) and signo_tree.children else None
             )
 
-            # Sin signo o '+'
-            if sign_token is None or sign_token.type == "PLUS":
-                return primary_result
+            # Sin signo o '+' (MAS)
+            if sign_token is None or sign_token.type == "MAS":
+                return primario_result
 
-            # Signo '-': genera UMINUS
-            if sign_token.type == "MINUS":
-                # Pide un temporal del mismo tipo que el primary
-                temp_address = self.virtual_memory.allocate_temporary(primary_result.result_type)
+            # Signo '-' (MENOS): genera UMINUS
+            if sign_token.type == "MENOS":
+                # Pide un temporal del mismo tipo que el primario
+                temp_address = self.virtual_memory.allocate_temporary(primario_result.result_type)
 
                 # Genera el cuádruplo UMINUS usando direcciones
                 self.context.quadruples.enqueue(
-                    Quadruple("UMINUS", primary_result.address, None, temp_address)
+                    Quadruple("UMINUS", primario_result.address, None, temp_address)
                 )
 
-                return ExpressionResult(temp_address, primary_result.result_type)
+                return ExpressionResult(temp_address, primario_result.result_type)
+
+        # Caso especial: paréntesis en el árbol (PAREN_IZQ expresion PAREN_DER)
+        if len(children) == 3:
+            if (isinstance(children[0], Token) and children[0].type == "PAREN_IZQ" and
+                isinstance(children[2], Token) and children[2].type == "PAREN_DER"):
+                expresion_tree = children[1]
+                return self._generate_expresion(expresion_tree)
 
         raise ValueError(f"Forma inesperada de factor: {children!r}")
 
-    def _generate_primary(self, primary_tree: Tree) -> ExpressionResult:
+    def _generate_primario(self, primario_tree: Tree) -> ExpressionResult:
         """
-        primary: ID call_suffix? | number
+        primario: PAREN_IZQ expresion PAREN_DER | constante | ID sufijo_llamada?
         """
-        child = primary_tree.children[0]
+        child = primario_tree.children[0]
+
+        # Caso paréntesis: PAREN_IZQ expresion PAREN_DER
+        if isinstance(child, Token) and child.type == "PAREN_IZQ":
+            expresion_tree = primario_tree.children[1]
+            return self._generate_expresion(expresion_tree)
+
+        # Caso constante
+        if isinstance(child, Tree) and child.data == "constante":
+            return self._generate_constante(child)
 
         # Caso ID: puede ser variable o función
         if isinstance(child, Token) and child.type == "ID":
             identifier_name = child.value
 
-            # Verifica si hay un call_suffix (función llamada en expresión)
-            if len(primary_tree.children) >= 2:
-                call_suffix_tree = primary_tree.children[1]
-                if isinstance(call_suffix_tree, Tree) and call_suffix_tree.data == "call_suffix":
+            # Verifica si hay un sufijo_llamada (función llamada en expresión)
+            if len(primario_tree.children) >= 2:
+                sufijo_llamada_tree = primario_tree.children[1]
+                if isinstance(sufijo_llamada_tree, Tree) and sufijo_llamada_tree.data == "sufijo_llamada":
                     # Es una llamada a función como expresión
-                    # call_suffix contiene LPAREN args RPAREN
+                    # sufijo_llamada contiene PAREN_IZQ args? PAREN_DER
                     args_tree = None
-                    for suffix_child in call_suffix_tree.children:
+                    for suffix_child in sufijo_llamada_tree.children:
                         if isinstance(suffix_child, Tree) and suffix_child.data == "args":
                             args_tree = suffix_child
                             break
 
                     return self._generate_function_call_expression(identifier_name, args_tree)
 
-            # No hay call_suffix: es una variable
+            # No hay sufijo_llamada: es una variable
             variable_info = self.function_directory.lookup_variable(
                 variable_name=identifier_name,
                 current_function_name=self.current_function_name,
@@ -833,28 +861,24 @@ class ExpressionQuadrupleGenerator:
 
             return ExpressionResult(variable_info.virtual_address, variable_info.var_type)
 
-        # Caso literal numérico
-        if isinstance(child, Tree) and child.data == "number":
-            return self._generate_number(child)
+        raise ValueError(f"Forma inesperada de primario: {primario_tree.children!r}")
 
-        raise ValueError(f"Forma inesperada de primary: {primary_tree.children!r}")
-
-    def _generate_number(self, number_tree: Tree) -> ExpressionResult:
+    def _generate_constante(self, constante_tree: Tree) -> ExpressionResult:
         """
-        number: CTE_INT | CTE_FLOAT
+        constante: CTE_INT | CTE_FLOAT
         """
-        token = number_tree.children[0]
+        token = constante_tree.children[0]
         if not isinstance(token, Token):
-            raise ValueError("number debe contener un token literal.")
+            raise ValueError("constante debe contener un token literal.")
 
-        # INT -> segmento de constantes enteras
+        # CTE_INT -> segmento de constantes enteras
         if token.type == "CTE_INT":
             address = self.virtual_memory.allocate_constant(token.value, INT)
             return ExpressionResult(address, INT)
 
-        # FLOAT -> segmento de constantes flotantes
+        # CTE_FLOAT -> segmento de constantes flotantes
         if token.type == "CTE_FLOAT":
             address = self.virtual_memory.allocate_constant(token.value, FLOAT)
             return ExpressionResult(address, FLOAT)
 
-        raise ValueError(f"Token inesperado en number: {token!r}")
+        raise ValueError(f"Token inesperado en constante: {token!r}")
