@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import Optional, List, Dict
 from lark import Tree, Token
 from semantics import (
     FunctionDirectory,
@@ -7,8 +7,10 @@ from semantics import (
     INT,
     FLOAT,
     BOOL,
+    VOID,
     result_type,
     assert_assign,
+    assert_return,
     ensure_bool,
     SemanticError,
 )
@@ -60,6 +62,17 @@ class ExpressionQuadrupleGenerator:
 
         # Nombre de la función actual (None = cuerpo principal)
         self.current_function_name: Optional[str] = None
+
+        # Indice del primer cuádruplo ejecutable de cada función (después de BEGINFUNC).
+        # Se usa para rellenar el destino de los GOSUB.
+        self.function_start_indices: Dict[str, int] = {}
+
+        # GOTO pendientes generados por 'return;' o 'return expr;'.
+        # Al finalizar la función se cubren para que apunten al ENDFUNC.
+        self.pending_return_gotos: Dict[str, List[int]] = {}
+
+        # GOSUB pendientes de saber a qué índice de cuádruplo deben saltar
+        self.pending_gosub_fixups: Dict[str, List[int]] = {}
 
     def _emit_binary_operation(
         self,
@@ -132,7 +145,7 @@ class ExpressionQuadrupleGenerator:
 
     def _generate_function(self, func_decl_tree: Tree) -> None:
         """
-        func_decl: VOID ID LPAREN params RPAREN LBRACKET vars_section body RBRACKET SEMICOL
+        func_decl: func_return_type ID LPAREN params RPAREN LBRACKET vars_section body RBRACKET SEMICOL
         """
         function_name: Optional[str] = None
         body_tree: Optional[Tree] = None
@@ -158,18 +171,35 @@ class ExpressionQuadrupleGenerator:
         previous_function_name = self.current_function_name
         self.current_function_name = function_name
 
-        # Marca inicio de función
-        self.context.quadruples.enqueue(
+        # Crea o reinicia la lista de GOTO generados por 'return' para esta función.
+        self.pending_return_gotos[function_name] = []
+
+        # Marca inicio de función (BEGINFUNC) y registra el índice de inicio real del cuerpo
+        begin_index = self.context.quadruples.enqueue(
             Quadruple("BEGINFUNC", function_name, None, None)
         )
+        # El primer cuádruplo ejecutable del cuerpo es el siguiente a BEGINFUNC
+        self.function_start_indices[function_name] = begin_index + 1
 
-        # Genera su body
+        # Si ya había GOSUB pendientes para esta función (llamadas adelantadas),
+        # se parcha ahora su destino.
+        for gosub_index in self.pending_gosub_fixups.get(function_name, []):
+            self.context.quadruples.update_result(
+                gosub_index,
+                self.function_start_indices[function_name],
+            )
+        # Ya no quedan pendientes para esta función
+        self.pending_gosub_fixups[function_name] = []
+
         self._generate_body(body_tree)
 
-        # Marca fin de función
-        self.context.quadruples.enqueue(
+        end_index = self.context.quadruples.enqueue(
             Quadruple("ENDFUNC", function_name, None, None)
         )
+
+        # Cualquier 'return' dentro de esta función salta a ENDFUNC
+        for goto_index in self.pending_return_gotos.get(function_name, []):
+            self.context.quadruples.update_result(goto_index, end_index)
 
         self.current_function_name = previous_function_name
 
@@ -188,7 +218,7 @@ class ExpressionQuadrupleGenerator:
 
     def _generate_statement(self, statement_tree: Tree) -> None:
         """
-        statement: assign | condition | cycle | fcall | print_stmt | body
+        statement: assign | condition | cycle | fcall | print_stmt | return_stmt | body
         """
         for child in statement_tree.children:
             if not isinstance(child, Tree):
@@ -204,6 +234,8 @@ class ExpressionQuadrupleGenerator:
                 self._generate_fcall(child)
             elif child.data == "print_stmt":
                 self._generate_print_stmt(child)
+            elif child.data == "return_stmt":
+                self._generate_return_stmt(child)
             elif child.data == "body":
                 self._generate_body(child)
 
@@ -316,6 +348,72 @@ class ExpressionQuadrupleGenerator:
                     Quadruple("PRINT", string_address, None, None)
                 )
 
+    def _prepare_function_call(self, function_name: str, args_tree: Optional[Tree]):
+        """
+        Valida número y tipos de argumentos para una llamada a función.
+        Regresa:
+        - function_info: metadatos de la función (tipo de retorno, parámetros).
+        - argument_results: lista de ExpressionResult de cada argumento en orden.
+        """
+        function_info = self.function_directory.get_function(function_name)
+        parameter_list = function_info.parameter_list
+
+        # Si no hay nodo args (funciones sin parámetros)
+        if args_tree is None or not isinstance(args_tree, Tree):
+            argument_results: List[ExpressionResult] = []
+        else:
+            argument_results = self._generate_args(args_tree)
+
+        expected_count = len(parameter_list)
+        given_count = len(argument_results)
+
+        if expected_count != given_count:
+            raise SemanticError(
+                f"Llamada a función '{function_name}' con {given_count} argumentos, "
+                f"pero se esperaban {expected_count}."
+            )
+
+        # Validación de tipos
+        for position, (arg_result, param_info) in enumerate(
+            zip(argument_results, parameter_list),
+            start=1,
+        ):
+            assert_assign(
+                left_type=param_info.var_type,
+                right_type=arg_result.result_type,
+                context=f"argumento {position} de '{function_name}'",
+            )
+
+        return function_info, argument_results
+
+    def _emit_function_activation(self, function_info, argument_results: List["ExpressionResult"]) -> None:
+        """
+        Genera los cuádruplos ERA, PARAM y GOSUB para una llamada a función.
+        """
+        function_name = function_info.name
+
+        # ERA: prepara el activation record de la función
+        self.context.quadruples.enqueue(
+            Quadruple("ERA", function_name, None, None)
+        )
+
+        # PARAM: manda cada argumento en orden
+        for position, arg_result in enumerate(argument_results, start=1):
+            self.context.quadruples.enqueue(
+                Quadruple("PARAM", arg_result.address, None, position)
+            )
+
+        # GOSUB: salto a la función
+        start_index = self.function_start_indices.get(function_name)
+        gosub_index = self.context.quadruples.enqueue(
+            Quadruple("GOSUB", function_name, None, start_index)
+        )
+
+        # Si todavía no se sabe dónde inicia la función (llamada adelantada),
+        # guarda este GOSUB para parcharlo cuando se procese el func_decl.
+        if start_index is None:
+            self.pending_gosub_fixups.setdefault(function_name, []).append(gosub_index)
+
     def _generate_fcall(self, fcall_tree: Tree) -> None:
         """
         fcall: ID LPAREN args RPAREN SEMICOL
@@ -332,43 +430,12 @@ class ExpressionQuadrupleGenerator:
 
         if function_name is None:
             raise ValueError("fcall sin nombre de función.")
-        if args_tree is None:
-            raise ValueError(f"fcall de '{function_name}' sin args.")
 
-        function_info = self.function_directory.get_function(function_name)
-        parameter_list = function_info.parameter_list
+        # Prepara y valida la llamada
+        function_info, argument_results = self._prepare_function_call(function_name, args_tree)
 
-        # Genera ExpressionResult para cada argumento
-        argument_results = self._generate_args(args_tree)
-
-        expected_count = len(parameter_list)
-        given_count = len(argument_results)
-
-        if expected_count != given_count:
-            raise SemanticError(
-                f"Llamada a función '{function_name}' con {given_count} argumentos, "
-                f"pero se esperaban {expected_count}."
-            )
-
-        # Validación de tipos y generación de cuádruplos ARG
-        for position, (arg_result, param_info) in enumerate(
-            zip(argument_results, parameter_list),
-            start=1,
-        ):
-            assert_assign(
-                left_type=param_info.var_type,
-                right_type=arg_result.result_type,
-                context=f"argumento {position} de '{function_name}'",
-            )
-
-            self.context.quadruples.enqueue(
-                Quadruple("ARG", arg_result.address, None, position)
-            )
-
-        # CALL final
-        self.context.quadruples.enqueue(
-            Quadruple("CALL", function_name, given_count, None)
-        )
+        # Genera ERA, PARAM, GOSUB.
+        self._emit_function_activation(function_info, argument_results)
 
     def _generate_args(self, args_tree: Tree) -> List[ExpressionResult]:
         """
@@ -385,6 +452,73 @@ class ExpressionQuadrupleGenerator:
             results.append(self._generate_expression(expr_node))
 
         return results
+
+    def _generate_return_stmt(self, return_tree: Tree) -> None:
+        """
+        return_stmt: RETURN expression? SEMICOL
+
+        Genera el código para un 'return' dentro de una función:
+        - Valida el tipo usando assert_return.
+        - Si la función tiene tipo, copia el valor a su slot de retorno.
+        - Genera un GOTO de salida al final de la función.
+        """
+        if self.current_function_name is None:
+            # No se encuentra dentro de ninguna función (cuerpo principal)
+            raise SemanticError("El estatuto 'return' solo puede usarse dentro de una función.")
+
+        # Localiza en caso de existir la expresión del return
+        expression_tree: Optional[Tree] = None
+        for child in return_tree.children:
+            if isinstance(child, Tree) and child.data == "expression":
+                expression_tree = child
+                break
+
+        expression_result: Optional[ExpressionResult] = None
+        expr_type: Optional[TypeName]
+
+        if expression_tree is not None:
+            expression_result = self._generate_expression(expression_tree)
+            expr_type = expression_result.result_type
+        else:
+            expr_type = None
+
+        # Validación de tipos contra el tipo de retorno de la función actual
+        assert_return(
+            function_directory=self.function_directory,
+            current_function_name=self.current_function_name,
+            expression_type=expr_type,
+        )
+
+        # Revisa el tipo de la función
+        function_info = self.function_directory.get_function(self.current_function_name)
+
+        # Si la función tiene tipo (INT/FLOAT), debe copiar el valor al slot de retorno
+        if function_info.return_type != VOID:
+            if expression_result is None:
+                # Esto no debería pasar porque assert_return ya habría tronado antes,
+                # pero dejamos el check por claridad.
+                raise SemanticError(
+                    f"La función '{function_info.name}' debe regresar un valor."
+                )
+
+            # Dirección global reservada para el valor de retorno de esta función
+            ret_address = self.virtual_memory.get_function_return_address(function_info.name)
+
+            # Generar ASSIGN expr -> ret_address
+            self.context.quadruples.enqueue(
+                Quadruple(
+                    "ASSIGN",
+                    expression_result.address,
+                    None,
+                    ret_address,
+                )
+            )
+
+        # En cualquier caso, se genera un GOTO de salida.
+        goto_index = self.context.quadruples.enqueue(
+            Quadruple("GOTO", None, None, None)
+        )
+        self.pending_return_gotos.setdefault(self.current_function_name, []).append(goto_index)
 
     # Estatutos no lineales: if / else y while
     def _generate_condition(self, condition_tree: Tree) -> None:
@@ -582,6 +716,39 @@ class ExpressionQuadrupleGenerator:
             index += 2
 
         return current_result
+    
+    def _generate_function_call_expression(
+        self,
+        function_name: str,
+        args_tree: Optional[Tree],
+    ) -> ExpressionResult:
+        """
+        Genera cuádruplos para una llamada a función usada en una expresión,
+        - Usa ERA / PARAM / GOSUB.
+        - Toma el valor de retorno de la función desde su dirección reservada
+        en memoria virtual.
+        - Copia ese valor a un temporal y regresa un ExpressionResult.
+        """
+        function_info, argument_results = self._prepare_function_call(function_name, args_tree)
+
+        if function_info.return_type == VOID:
+            raise SemanticError(
+                f"No se puede usar la función VOID '{function_name}' en una expresión."
+            )
+
+        # ERA, PARAM, GOSUB
+        self._emit_function_activation(function_info, argument_results)
+
+        # Dirección donde la función deja su valor de retorno
+        ret_address = self.virtual_memory.get_function_return_address(function_name)
+
+        # Copiar el valor de retorno a un temporal para usarlo en la expresión
+        temp_address = self.virtual_memory.allocate_temporary(function_info.return_type)
+        self.context.quadruples.enqueue(
+            Quadruple("ASSIGN", ret_address, None, temp_address)
+        )
+
+        return ExpressionResult(temp_address, function_info.return_type)
 
     def _generate_factor(self, factor_tree: Tree) -> ExpressionResult:
         """
@@ -630,23 +797,38 @@ class ExpressionQuadrupleGenerator:
 
     def _generate_primary(self, primary_tree: Tree) -> ExpressionResult:
         """
-        primary: ID | number
+        primary: ID call_suffix? | number
         """
         child = primary_tree.children[0]
 
-        # Caso ID: variable
+        # Caso ID: puede ser variable o función
         if isinstance(child, Token) and child.type == "ID":
-            variable_name = child.value
+            identifier_name = child.value
 
+            # Verifica si hay un call_suffix (función llamada en expresión)
+            if len(primary_tree.children) >= 2:
+                call_suffix_tree = primary_tree.children[1]
+                if isinstance(call_suffix_tree, Tree) and call_suffix_tree.data == "call_suffix":
+                    # Es una llamada a función como expresión
+                    # call_suffix contiene LPAREN args RPAREN
+                    args_tree = None
+                    for suffix_child in call_suffix_tree.children:
+                        if isinstance(suffix_child, Tree) and suffix_child.data == "args":
+                            args_tree = suffix_child
+                            break
+
+                    return self._generate_function_call_expression(identifier_name, args_tree)
+
+            # No hay call_suffix: es una variable
             variable_info = self.function_directory.lookup_variable(
-                variable_name=variable_name,
+                variable_name=identifier_name,
                 current_function_name=self.current_function_name,
             )
 
             # Debe tener una dirección virtual asignada
             if variable_info.virtual_address is None:
                 raise SemanticError(
-                    f"Variable '{variable_name}' no tiene dirección virtual asignada."
+                    f"Variable '{identifier_name}' no tiene dirección virtual asignada."
                 )
 
             return ExpressionResult(variable_info.virtual_address, variable_info.var_type)

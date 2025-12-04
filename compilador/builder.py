@@ -1,11 +1,11 @@
 from typing import Optional, List, Tuple
 from lark import Transformer, Token
-
 from semantics import (
     FunctionDirectory,
     TypeName,
     INT,
     FLOAT,
+    VOID,
     InvalidTypeError,
     SemanticError,
 )
@@ -59,6 +59,30 @@ class SemanticBuilder(Transformer):
             return FLOAT
 
         raise InvalidTypeError(f"Tipo no soportado en la regla 'type': {type_token}")
+    
+    def func_return_type(self, children):
+        """
+        Convierte la regla 'func_return_type' de la gramática en un TypeName.
+
+        En la gramática: func_return_type: VOID | type
+        Casos:    
+        - Si viene VOID, el hijo será un Token("VOID").
+        - Si viene un tipo (int/float), el hijo será el string que regresa self.type(), es decir, INT o FLOAT.
+        """
+        child = children[0]
+
+        # Caso: token VOID directamente
+        if isinstance(child, Token) and child.type == "VOID":
+            return VOID
+
+        # Caso: ya es un TypeName (INT o FLOAT) que vino de la regla 'type'
+        if isinstance(child, str) and child in (INT, FLOAT):
+            return child
+
+        # Cualquier otra cosa es un error de consistencia
+        raise SemanticError(
+            f"Valor inesperado en func_return_type: {child!r}"
+        )
 
     def decvar(self, children):
         """
@@ -125,19 +149,30 @@ class SemanticBuilder(Transformer):
         """
         Punto neurálgico:
         - Crear la entrada de la función en el FunctionDirectory.
+        - Guardar su tipo de retorno (void, int o float).
         - Agregar sus parámetros.
         - Agregar sus variables locales.
         """
         function_name: Optional[str] = None
+        function_return_type: TypeName = VOID
         parameter_declarations: List[Tuple[str, TypeName]] = []
         local_declarations: List[Tuple[List[str], TypeName]] = []
 
-        # 1. Recorre los hijos y extrae lo que interesan
+        # 1. Recorre los hijos y extrae lo que interesa
         for element in children:
-            if isinstance(element, Token) and element.type == "ID" and function_name is None:
+            # Primero viene el tipo de retorno (regla func_return_type)
+            if (
+                isinstance(element, str)
+                and element in (INT, FLOAT, VOID)
+                and function_return_type == VOID  # solo toma el primero
+            ):
+                function_return_type = element
+
+            # Luego viene el nombre de la función
+            elif isinstance(element, Token) and element.type == "ID" and function_name is None:
                 function_name = element.value
 
-            # 'params' produce una lista de (nombre, tipo)
+            # Listas: pueden ser parámetros o declaraciones locales
             elif isinstance(element, list) and element:
                 first_item = element[0]
 
@@ -152,8 +187,11 @@ class SemanticBuilder(Transformer):
         if function_name is None:
             raise SemanticError("No se encontró el nombre de la función en func_decl.")
 
-        # 2. Crea la función en el directorio
-        self.function_directory.add_function(function_name)
+        # 2. Crea la función en el directorio, con su tipo de retorno
+        self.function_directory.add_function(
+            function_name=function_name,
+            return_type=function_return_type,
+        )
 
         # 3. Agrega los parámetros a la función
         for parameter_name, parameter_type in parameter_declarations:

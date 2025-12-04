@@ -8,6 +8,7 @@ from semantics import (
     INT,
     FLOAT,
     BOOL,
+    VOID,
 )
 
 # Rangos de direcciones virtuales
@@ -30,6 +31,11 @@ CONST_STRING_START = 12000
 
 @dataclass
 class MemoryCounters:
+    """
+    Lleva los contadores de cada segmento de memoria virtual.
+    Cada atributo representa la siguiente dirección libre dentro de un rango
+    reservado para cierto tipo y segmento.
+    """
     global_int: int = GLOBAL_INT_START
     global_float: int = GLOBAL_FLOAT_START
     global_bool: int = GLOBAL_BOOL_START
@@ -54,7 +60,12 @@ class ConstantTable:
     """
     _table: Dict[Tuple[str, TypeName], int] = field(default_factory=dict)
 
-    def get_or_create(self,literal_value: str, const_type: TypeName, counters: MemoryCounters,) -> int:
+    def get_or_create(
+        self,
+        literal_value: str,
+        const_type: TypeName,
+        counters: MemoryCounters,
+    ) -> int:
         """
         Regresa la dirección asociada al literal. Si no existe, la crea.
         """
@@ -62,7 +73,7 @@ class ConstantTable:
         if key in self._table:
             return self._table[key]
 
-        # Asigar una nueva dirección según el tipo de constante
+        # Asigna una nueva dirección según el tipo de constante
         if const_type == INT:
             address = counters.const_int
             counters.const_int += 1
@@ -76,7 +87,7 @@ class ConstantTable:
 
         self._table[key] = address
         return address
-    
+
     # Se usa para imprimir la tabla de constantes
     def to_dict(self) -> Dict[Tuple[str, TypeName], int]:
         return dict(self._table)
@@ -84,18 +95,27 @@ class ConstantTable:
 
 @dataclass
 class VirtualMemory:
+    """
+    Administra la asignación de direcciones virtuales.
+    - counters: lleva los punteros actuales para cada segmento.
+    - constant_table: administra las direcciones de constantes.
+    - function_return_addresses: para cada función con tipo, guarda la dirección donde se almacenará su valor de retorno.
+    """
+
     counters: MemoryCounters = field(default_factory=MemoryCounters)
     constant_table: ConstantTable = field(default_factory=ConstantTable)
+    function_return_addresses: Dict[str, int] = field(default_factory=dict)
 
-    # Asignación de variables
+    # Asignación genérica desde un segmento
     def _allocate_from_segment(self, segment_name: str) -> int:
         """
-        Helper interno: toma el valor actual del segmento, lo regresa y avanza el contador
+        Toma el valor actual del segmento, lo regresa y avanza el contador.
         """
         value = getattr(self.counters, segment_name)
         setattr(self.counters, segment_name, value + 1)
         return value
 
+    # VARIABLES Y TEMPORALES
     def allocate_global(self, variable_type: TypeName) -> int:
         """
         Asigna una dirección virtual para una variable GLOBAL según su tipo.
@@ -132,18 +152,68 @@ class VirtualMemory:
             return self._allocate_from_segment("temp_bool")
         raise ValueError(f"Tipo no soportado para temporal: {temp_type}")
 
-    # Asignación de constantes
+    # CONSTANTES
     def allocate_constant(self, literal_value: str, const_type: TypeName) -> int:
         """
         Regresa la dirección virtual asociada al literal (creándola si hace falta).
         """
         return self.constant_table.get_or_create(literal_value, const_type, self.counters)
 
-# Asignación de direcciones a variables ya declaradas en FunctionDirectory
-def assign_variable_addresses( function_directory: FunctionDirectory, virtual_memory: VirtualMemory,) -> None:
+    # VALORES DE RETORNO DE FUNCIONES CON TIPO
+    def allocate_function_return(self, function_name: str, return_type: TypeName) -> int:
+        """
+        Crea (si es necesario) y regresa la dirección de retorno de una función.
+        - Solo tiene sentido para funciones cuyo tipo de retorno NO es VOID.
+        - La dirección se asigna en el mismo segmento que una variable global del tipo correspondiente (INT o FLOAT).
+        - Si ya se había asignado, se regresa el valor ya guardado.
+        """
+        if return_type == VOID:
+            raise ValueError(
+                f"No se puede asignar dirección de retorno a una función VOID ('{function_name}')."
+            )
+
+        # Si ya existe, no volvemos a asignar
+        if function_name in self.function_return_addresses:
+            return self.function_return_addresses[function_name]
+
+        if return_type == INT:
+            address = self._allocate_from_segment("global_int")
+        elif return_type == FLOAT:
+            address = self._allocate_from_segment("global_float")
+        else:
+            raise ValueError(
+                f"Tipo de retorno no soportado para función '{function_name}': {return_type}"
+            )
+
+        self.function_return_addresses[function_name] = address
+        return address
+
+    def get_function_return_address(self, function_name: str) -> int:
+        """
+        Regresa la dirección de retorno ya asignada para la función dada.
+        Esta función se usa típicamente en la generación de cuádruplos:
+        - Al hacer GOSUB, el valor de retorno se deja en esta dirección.
+        - Después del GOSUB, se puede copiar de esta dirección a un temporal.
+        """
+        try:
+            return self.function_return_addresses[function_name]
+        except KeyError as exc:
+            raise KeyError(
+                f"No se encontró dirección de retorno para la función '{function_name}'. "
+                "¿La función es VOID o aún no se asignaron direcciones?"
+            ) from exc
+
+
+# ASIGNA DIRECCIONES A VARIABLES DECLARADAS
+def assign_variable_addresses(
+    function_directory: FunctionDirectory,
+    virtual_memory: VirtualMemory,
+) -> None:
     """
-    Recorre el FunctionDirectory y asigna direcciones virtuales a todas las
-    variables globales y locales (incluyendo parámetros).
+    Recorre el FunctionDirectory y asigna dirección a todas las variables globales, 
+    asigna dirección a todas las variables locales (incluyendo parámetros), y 
+    reserva, para cada función con tipo de retorno, una dirección donde se
+    almacenará su valor de retorno.
     """
 
     # 1) Variables globales
@@ -151,15 +221,22 @@ def assign_variable_addresses( function_directory: FunctionDirectory, virtual_me
         if variable_info.virtual_address is None:
             variable_info.virtual_address = virtual_memory.allocate_global(variable_info.var_type)
 
-    # 2) Variables y parámetros de cada función
+    # 2) Variables, parámetros y retorno de cada función
     for function_info in function_directory.functions.values():
-        # Primero todas las variables locales (incluye parámetros)
+        # a) Todas las variables locales (incluye parámetros)
         for variable_info in function_info.local_variables.variables.values():
             if variable_info.virtual_address is None:
                 variable_info.virtual_address = virtual_memory.allocate_local(variable_info.var_type)
 
-        # Sincronizar los objetos de parameter_list con los de local_variables
+        # b) Sincronizar los objetos de parameter_list con los de local_variables
         for parameter in function_info.parameter_list:
             local_copy: Optional[VariableInfo] = function_info.local_variables.variables.get(parameter.name)
             if local_copy is not None:
                 parameter.virtual_address = local_copy.virtual_address
+
+        # c) Si la función tiene tipo de retorno, reservar su dirección de retorno
+        if function_info.return_type != VOID:
+            virtual_memory.allocate_function_return(
+                function_name=function_info.name,
+                return_type=function_info.return_type,
+            )

@@ -8,38 +8,76 @@ from virtual_memory import VirtualMemory, assign_variable_addresses
 DEMO = """
 program demo;
 vars:
-    a, b, c: int;
-    x: float;
+    x, y, result: int;
+    pi, area: float;
 
-void foo(p: int, q: float) [
-    vars:
-        tmp: int;
+int square(n: int) [
     {
-        print("in foo");
+        return n * n;
+    }
+];
+
+int abs(value: int) [
+    {
+        if (value < 0) {
+            return -value;
+        } else {
+            return value;
+        };
+    }
+];
+
+float circleArea(radius: float) [
+    {
+        return radius * radius;
+    }
+];
+
+int max(a: int, b: int) [
+    {
+        if (a > b) {
+            return a;
+        } else {
+            return b;
+        };
+    }
+];
+
+void printMessage(code: int) [
+    {
+        if (code == 0) {
+            print("Success");
+            return;
+        };
+        print("Error");
     }
 ];
 
 main {
-    a = 2;
-    b = 3;
-    c = a + b * 2;
-    x = 3.5;
+    x = 5;
+    y = -3;
 
-    if (c > 10) {
-        print("big");
-    } else {
-        print("small");
-    };
+    result = square(x);
+    print(result, "square of 5");
 
-    while (c < 20) do {
-        c = c + 1;
-    };
+    result = abs(y);
+    print(result, "absolute value");
 
-    foo(c, x);
+    result = max(x, y);
+    print(result, "maximum");
+
+    pi = 3.14;
+    area = circleArea(pi);
+    print(area, "area");
+
+    result = square(x) + abs(y);
+    print(result, "combined expression");
+
+    printMessage(0);
+    printMessage(1);
 }
 end
 """
-
 
 def main() -> None:
     try:

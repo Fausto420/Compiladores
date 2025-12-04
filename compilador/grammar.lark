@@ -21,6 +21,7 @@ ELSE: "else"
 WHILE: "while"
 DO: "do"
 PRINT: "print"
+RETURN: "return"
 INT: "int"
 FLOAT: "float"
 
@@ -46,45 +47,60 @@ RBRACE: "}"
 LBRACKET: "["
 RBRACKET: "]"
 
-// - SINTAXIS - 
+// - SINTAXIS -
 
 start: program
 
-// Programa
-program: PROGRAM ID SEMICOL vars_section funcs_section MAIN body END
+// Programa completo
+program: PROGRAM ID SEMICOL vars_section? funcs_section MAIN body END
 
-// Tipos
+// Tipos básicos (para variables y funciones con tipo)
 type: INT | FLOAT
 
-// Variables
-vars_section: VARS COLON decvar+ 
+// Sección de variables globales o locales
+vars_section: VARS COLON decvar+
 decvar: id_list COLON type SEMICOL
 id_list: ID (COMMA ID)*
 
-// Funciones
+// - FUNCIONES -
+
+// Regla para el tipo de retorno de la función:
+// puede ser VOID (función sin valor) o un tipo numérico (INT/FLOAT)
+func_return_type: VOID | type
+
+// Declaración de función:
 funcs_section: func_decl*
-func_decl: VOID ID LPAREN params RPAREN LBRACKET vars_section body RBRACKET SEMICOL
+func_decl: func_return_type ID LPAREN params? RPAREN LBRACKET vars_section? body RBRACKET SEMICOL
+
+// Parámetros formales
 params: param (COMMA param)*
 param: ID COLON type
 
-// BODY y sentencias
+// - BODY Y ESTATUTOS -
+
 body: LBRACE stmt_list RBRACE
 stmt_list: statement*
 
-statement: assign | condition | cycle | fcall | print_stmt | body
+// return_stmt como un estatuto más
+statement: assign | condition | cycle | fcall | print_stmt | return_stmt | body
 
-// Asignación 
+// Asignación:  id = expresión ;
 assign: ID ASSIGN expression SEMICOL
 
-// Condicional
+// if (expresión) { ... } [else { ... }] ;
 condition: IF LPAREN expression RPAREN body (ELSE body)? SEMICOL
 
-// Ciclo While
+// while (expresión) do { ... } ;
 cycle: WHILE LPAREN expression RPAREN DO body SEMICOL
 
-// Llamada a función
+// Llamada a función como estatuto: foo(a, b);
 fcall: ID LPAREN args RPAREN SEMICOL
 args: expression (COMMA expression)*
+
+// NUEVO: return [expresión] ;
+// - En funciones VOID se usará "return;"
+// - En funciones con tipo se usará "return expresión;"
+return_stmt: RETURN expression? SEMICOL
 
 // Print
 print_stmt: PRINT LPAREN print_args RPAREN SEMICOL
@@ -100,6 +116,11 @@ term: factor ((STAR | SLASH) factor)*
 
 factor: LPAREN expression RPAREN | sign_opt primary
 sign_opt: (PLUS | MINUS)?
-primary: ID | number
-number: CTE_INT | CTE_FLOAT
 
+// primary incluye id, constantes y llamada a función como expresión
+primary: ID call_suffix? | number
+
+// Si no aparece, el ID se trata como variable
+call_suffix: LPAREN args RPAREN
+
+number: CTE_INT | CTE_FLOAT

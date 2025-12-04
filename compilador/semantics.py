@@ -142,7 +142,41 @@ def assert_assign(left_type: TypeName, right_type: TypeName, context: str = "ass
 
 def ensure_bool(expression_type: TypeName, context: str = "condition") -> None:
     if expression_type != BOOL:
-        raise InvalidTypeError(f"Expected BOOL in {context}, got {expression_type}")
+        raise InvalidTypeError(f"Se esperaba BOOL en {context}, se obtuvo {expression_type}")
+
+def assert_return(
+    function_directory: "FunctionDirectory",
+    current_function_name: str,
+    expression_type: Optional[TypeName],
+) -> None:
+    """
+    Valida que un estatuto 'return' sea compatible con el tipo de retorno
+    declarado para la función actual.
+    """
+    # Obtiene la info de la función actual
+    function_info = function_directory.get_function(current_function_name)
+    function_return_type = function_info.return_type
+
+    # Caso 1: función VOID
+    if function_return_type == VOID:
+        # No se puede regresar un valor desde una función VOID
+        if expression_type is not None:
+            raise InvalidTypeError(
+                f"No se puede regresar un valor desde una función VOID ('{function_info.name}')."
+            )
+        # 'return;' simple es válido
+        return
+
+    # Caso 2: función con tipo (INT o FLOAT)
+    if expression_type is None:
+        # Falta expresión en el return
+        raise InvalidTypeError(
+            f"La función '{function_info.name}' debe regresar un valor de tipo "
+            f"{function_return_type}, pero se encontró 'return;' sin expresión."
+        )
+
+    # Verifica compatibilidad de tipos como si fuera una asignación: return_type = expression_type
+    assert_assign(function_return_type, expression_type, context="return")
 
 # TABLA DE VARIABLES
 @dataclass
@@ -282,19 +316,26 @@ class FunctionDirectory:
 
     # Funciones para declarar y obtener funciones
     def add_function(self, function_name: str, return_type: TypeName = VOID) -> FunctionInfo:
-        if function_name in self.functions:
-            raise DuplicateFunctionError(
-                f"Función '{function_name}' ya fue declarada."
-            )
+            """
+            Declara una nueva función en el directorio.
 
-        if return_type != VOID:
-            raise InvalidTypeError(
-                f"Por ahora solo se permiten funciones VOID. Intento de usar tipo: {return_type}"
-            )
+            - Valida que no exista otra función con el mismo nombre.
+            - Valida que el tipo de retorno sea uno de los soportados (VOID, INT, FLOAT).
+            """
+            if function_name in self.functions:
+                raise DuplicateFunctionError(
+                    f"Función '{function_name}' ya fue declarada."
+                )
+            
+            if return_type not in (VOID, INT, FLOAT):
+                raise InvalidTypeError(
+                    f"Tipo de retorno de función no soportado: {return_type}"
+                )
 
-        function_info = FunctionInfo(name=function_name, return_type=return_type)
-        self.functions[function_name] = function_info
-        return function_info
+            # Crea el objeto FunctionInfo y lo registra
+            function_info = FunctionInfo(name=function_name, return_type=return_type)
+            self.functions[function_name] = function_info
+            return function_info
 
     def get_function(self, function_name: str) -> FunctionInfo:
         try:
